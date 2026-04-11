@@ -12,6 +12,56 @@ This document synthesizes the **final system architecture** implied by the proje
 > Important note:
 > The project brief defines the **network topology, runtime behavior, and folder structure**, but it does **not** prescribe a full software API design. So the architecture below is a **clean implementation architecture derived from the brief**, not a claim that the PDF literally gives these exact class names or software interfaces.
 
+Section **#0** below grounds this plan in the **provided skeleton** (paths, Makefile, POX hooks, DPID mapping). Earlier sections still describe required **network behavior**; use section 0 when translating the design into this repo’s files.
+
+---
+
+# 0. Skeleton code alignment (this repository)
+
+The distributed **project skeleton** fixes concrete filenames, POX integration, and DPID assumptions. The layering in sections 1–12 remains valid as behavioral guidance; this section maps it to what the skeleton **actually contains** so implementation stays consistent with the code you must extend.
+
+## 0.1 Directory layout (as provided)
+
+| Area | Path in repo | Role |
+|------|----------------|------|
+| Mininet topology + CLI entry | `topology/topology.py` | Defines `MyTopo`, starts `RemoteController` at `127.0.0.1:6633`, calls `startup_services(net)` (currently a stub you must complete for HTTP servers, inspector capture, routes). |
+| Automated test driver | `topology/topology_test.py` | Builds the same topology, starts the network, runs `run_tests(net)` after `startup_services(net)`. Extension point for automated scenarios; imports `from topology import *`. |
+| Test helpers | `topology/testing.py` | Stubs for `ping()` / `curl()`; assertions and timeouts are TODOs. |
+| POX controller + Click launcher | `applications/controller/baseController.py` | Registers OpenFlow listeners; attaches `LearningSwitch` from `forwarding.l2_learning` for DPIDs **1–3**; launches Click for **4** (`napt`), **5** (`ids`), **6** (`lb1`) via `applications/controller/click_wrapper.py`. |
+| Click process wrapper | `applications/controller/click_wrapper.py` | Shells out with `sudo click …`, redirects stdout/stderr to `/tmp/*.stdout` / `*.stderr`, tracks PIDs, `killall click` on shutdown paths. |
+| Click NFV sources | `applications/nfv/*.click` | `napt.click`, `ids.click`, `lb1.click` are symmetric **L2 forwarder** stubs (`FromDevice` → `Counter` → `Queue` → `ToDevice`). `forwarder.click` is an older sample referencing `sw1-eth*`. |
+| Lifecycle | `Makefile` | `topo`: `sudo python ./topology/topology.py`. `app`: `cp applications/controller/* $(poxdir)ext/`, `cp applications/nfv/*.click $(poxdir)ext/`, then `sudo python /opt/pox/pox.py baseController` (override `poxdir` for non-default installs). `clean`: removes copied files from `$(poxdir)ext/`, kills POX, `mn -c`, `killall click`. **`test` is a stub** in the skeleton and must be completed per the brief (`make test` → topology + controller + tester + `phase_1_report`). |
+
+**Course brief vs skeleton packaging:** Phase 1 text describes a hand-in tarball with paths such as `application/controllers/`, a top-level `nfv/`, and `results/` for tests. The **skeleton** consolidates controller + Click under **`applications/`** and keeps the Python test harness next to the topology under **`topology/`**. Before submission, follow the **current** Canvas folder checklist; functionally, keep the Makefile’s copy targets aligned with where POX loads `baseController` and the `.click` files (`$(poxdir)ext/` by default).
+
+## 0.2 POX + Click wiring (`baseController.py`)
+
+- **Learning vs NFV** is decided only by numeric **DPID**: `id <= 3` → `LearningSwitch(event.connection, False)`; `4` / `5` / `6` → `click_wrapper.start_click("/opt/pox/ext/napt.click", …)` etc. (paths assume default `poxdir=/opt/pox/` after `make app`).
+- Your Mininet `addSwitch(..., dpid="N")` scheme must stay consistent with this mapping whenever you rename switches or reorder devices.
+- Replace the bodies of **`applications/nfv/napt.click`**, **`ids.click`**, **`lb1.click`** in-repo; `make app` copies them into POX `ext/` for runtime.
+
+## 0.3 Click interface names in the stubs (`FromDevice` / `ToDevice`)
+
+Mininet derives Linux interface names from the node name plus port index. The skeleton uses:
+
+| Module | `define(...)` ports | Notes |
+|--------|---------------------|--------|
+| `napt.click` | `napt-eth1`, `napt-eth2` | Bidirectional bridge today; real NAPT must still terminate on these two device names unless you change link order and update defines together. |
+| `ids.click` | `ids-eth1`, `ids-eth3` | Second attachment is intentionally **`eth3`** in the file (third port index)—keep defines synchronized with actual `ids-eth*` after topology edits. |
+| `lb1.click` | `lb1-eth1`, `lb1-eth2` | Client/IDS-facing vs server-side toward `sw3`/LLM cluster. |
+
+The PDF requires **`SNIFFER false`** on `FromDevice` to avoid duplicate kernel forwarding; the stubs already set `SNIFFER false, PROMISC true`.
+
+## 0.4 Topology skeleton vs Figure 1
+
+`topology/topology.py` uses **`s1`–`s3`** as switch names while the brief and diagrams use **`sw1`–`sw3`**; several IZ hosts still show **`10.0.0.x` addresses with TODOs** instead of the **`100.0.0.x`** plan (and `insp` should be **`100.0.0.30/24`** per Figure 1). Treat the file as **structure + DPID template**: align **names, subnets, default routes** (e.g. `h1`/`h2` via **`10.0.0.1`**) with the PDF **without breaking** the `1–3` learning / `4–6` NFV split expected by `baseController.py`.
+
+## 0.5 Missing pieces you must implement (brief + skeleton gaps)
+
+- **`startup_services(net)`** in `topology/topology.py`: start **`python3 -m http.server 80`** (or equivalent) on **`llm1`–`llm3`**, start **`tcpdump`** (or equivalent) on **`insp`** for PCAP evidence, set **default routes** on hosts as needed (PDF suggests `ip route add default via 10.0.0.1` from the user zone).
+- **`Makefile` `test`**: must chain **`topo` + `app` + automated tests** and capture stdout/stderr into **`phase_1_report`** (fully automatic, per PDF).
+- **Reports**: each NFV should emit **`<function_id>.report`** on teardown using **`AverageCounter`/`Counter`** placement per the PDF’s testing section (example table for `lb1.report`).
+
 ---
 
 # 1. Executive summary
@@ -93,11 +143,12 @@ This layer is responsible for **creating the emulated network**.
 
 ### Main components
 
-- `topology/` Python files
+- `topology/topology.py` (and any additional topology modules you add under `topology/`)
 - Mininet host definitions
 - Mininet switch definitions
 - link configuration
 - IP addressing and default gateways
+- `startup_services(net)` for host-side daemons (HTTP, `tcpdump` on `insp`, routing helpers)
 
 ### Output of this layer
 
@@ -130,9 +181,10 @@ That logic belongs in Click modules.
 
 ### Main components
 
-- `application/controllers/baseController.py` or equivalent
-- POX L2 learning logic for `sw1-sw3`
-- subprocess launch of Click modules
+- `applications/controller/baseController.py` (class `controller`, `launch()` registers it with POX)
+- `applications/controller/click_wrapper.py` (`start_click`, teardown helpers)
+- POX L2 learning (`forwarding.l2_learning.LearningSwitch`) for the three OpenFlow switches with **DPID 1–3** (named `sw1`–`sw3` in the brief; align skeleton `s1`–`s3` naming with submission requirements)
+- Subprocess launch of Click modules for **DPID 4–6** (`napt`, `ids`, `lb1`)
 
 ---
 
@@ -144,11 +196,11 @@ It contains the three required network functions, each implemented as a **Click 
 
 ### Required modules
 
-- `napt.click`
-- `ids.click`
-- `lb1.click`
+- `applications/nfv/napt.click`
+- `applications/nfv/ids.click`
+- `applications/nfv/lb1.click`
 
-These modules are the actual packet-processing engines.
+These modules are the actual packet-processing engines. At runtime, **`make app`** copies them to **`$(poxdir)ext/`** (e.g. `/opt/pox/ext/`) where `baseController.py` loads them by absolute path.
 
 ---
 
@@ -190,10 +242,11 @@ This layer proves that the implementation works and that it can be graded automa
 
 ### Key files
 
-- `results/topology_test.py`
-- generated `lb1.report`, `ids.report`, `napt.report`
-- generated `phase_1_report`
-- root `Makefile`
+- `topology/topology_test.py` (test orchestration entry; may spawn or assume controller/topo per your final `make test` design)
+- `topology/testing.py` (shared traffic primitives)
+- generated `lb1.report`, `ids.report`, `napt.report` (written by Click on teardown; location should be predictable for graders)
+- generated `phase_1_report` (stdout/stderr of `make test`, per PDF)
+- root `Makefile` (`topo`, `app`, `clean`, **`test` to be completed** in the skeleton)
 
 ---
 
@@ -210,9 +263,9 @@ This layer proves that the implementation works and that it can be graded automa
 | `lb1` | Click NFV module | Own virtual service IP `100.0.0.45:80`, answer ARP, answer ping, round-robin distribute allowed HTTP requests to backends, rewrite responses back to virtual IP | Must present the service as a single virtual endpoint |
 | `sw3` | L2 switch | Connect load balancer to backend cluster | Regular POX/OVS learning switch |
 | `llm1-3` | Backend servers | Serve simple HTTP content as inference stand-ins | Same lightweight pages on all servers |
-| POX controller | Control plane | Configure learning switches and launch Click modules when Mininet nodes register | Should not implement NFV packet logic directly |
-| Test harness | Validation | Drive automated scenarios and verify outcomes | Must be automatic, not manual inspection |
-| Makefile | Lifecycle interface | Standardize `topo`, `app`, `clean`, `test` execution | Required for grading |
+| POX controller | Control plane | On each `ConnectionUp`, classify by **DPID** and either attach `LearningSwitch` or `start_click` for NFV nodes | Skeleton: **no** NFV logic inside POX beyond launching Click |
+| Test harness | Validation | `topology/topology_test.py` + `topology/testing.py` | Skeleton returns `True` from helpers; must assert real outcomes for grading |
+| Makefile | Lifecycle interface | `topo`, `app`, `clean`, `test` + **`phase_1_report`** | Skeleton `test` target is incomplete |
 
 ---
 
@@ -223,16 +276,16 @@ The brief is written mostly in networking terms, not software-interface terms. A
 ## 5.1 Infrastructure-to-control interface
 
 ### Interface
-- **Mininet boot / node registration events**
+- **OpenFlow `ConnectionUp` events** (one per switch datapath that connects to POX)
 
 ### Producer
-- topology layer
+- Mininet + OVS switches (`OVSSwitch`) with configured DPIDs
 
 ### Consumer
-- POX controller
+- `applications/controller/baseController.py`
 
 ### Meaning
-When Mininet starts and nodes appear, POX identifies which nodes are standard switches and which are Click-based NFV nodes.
+When each switch joins the controller, the skeleton uses **`event.dpid`** to decide whether to attach **`LearningSwitch`** (DPIDs **1–3**) or to **`start_click`** for **`napt` / `ids` / `lb1`** (**4 / 5 / 6**). This is stricter than a generic “node name” registry: **DPID assignment in `topology.py` must stay in lockstep** with that `if/elif` ladder (or you must update both together).
 
 ---
 
@@ -258,13 +311,13 @@ Standard L2 switching behavior is enforced here.
 - **process launch / module startup**
 
 ### Producer
-- POX controller
+- POX controller (`click_wrapper.start_click`, which uses `subprocess.Popen` with `shell=True`)
 
 ### Consumer
 - Click runtime for `napt`, `ids`, `lb1`
 
 ### Meaning
-POX starts the correct Click module for each special Mininet node, likely using `subprocess.Popen()`.
+After **`make app`**, the `.click` files live under **`$(poxdir)ext/`** (default `/opt/pox/ext/`). `baseController.py` launches **`/opt/pox/ext/napt.click`** (and similarly for `ids`/`lb1`) when the corresponding **DPID** connects. Edit sources under **`applications/nfv/`** in git; rely on the Makefile copy step for POX to see changes.
 
 ---
 
@@ -336,24 +389,24 @@ A strong project structure would map the architecture into five implementation s
 ```mermaid
 flowchart TD
     A[Makefile / lifecycle] --> B[topology/]
-    A --> C[application/controllers/]
-    A --> D[nfv/]
-    A --> E[results/]
+    A --> C[applications/controller/]
+    A --> D[applications/nfv/]
+    A --> E[topology/ tests + phase_1_report]
 
     B --> B1[Mininet topology builder]
     B --> B2[IP assignment + routes]
 
-    C --> C1[POX L2 learning switches]
-    C --> C2[Registration handling]
-    C --> C3[Launch Click modules]
+    C --> C1[POX L2 learning switches DPID 1-3]
+    C --> C2[ConnectionUp handling]
+    C --> C3[Launch Click via click_wrapper DPID 4-6]
 
     D --> D1[napt.click]
     D --> D2[ids.click]
     D --> D3[lb1.click]
 
-    E --> E1[topology_test.py]
-    E --> E2[function reports]
-    E --> E3[phase_1_report]
+    E --> E1[topology_test.py + testing.py]
+    E --> E2[function reports from Click]
+    E --> E3[phase_1_report from make test]
 ```
 
 ## Suggested ownership by folder
@@ -364,16 +417,16 @@ Owns:
 - links
 - IP plan
 - routes
-- startup helpers
+- `startup_services(net)` (HTTP on LLMs, `tcpdump` on `insp`, routing)
+- **`topology_test.py` / `testing.py`** in the skeleton (PDF tarball layout may instead use a separate `results/` directory—mirror whatever Canvas mandates)
 
-### `application/controllers/`
+### `applications/controller/`
 Owns:
-- POX startup
-- learning-switch behavior for `sw1-sw3`
-- detecting `napt`, `ids`, `lb1`
-- launching Click modules
+- POX `baseController.py` entry (`pox.py baseController`)
+- learning-switch behavior for the three switches with **DPID 1–3**
+- branching on **DPID 4/5/6** to launch `napt` / `ids` / `lb1` Click via `click_wrapper`
 
-### `nfv/`
+### `applications/nfv/`
 Owns:
 - packet-processing logic
 - ARP handling
@@ -382,12 +435,12 @@ Owns:
 - counters
 - per-module reports
 
-### `results/`
+### Tests and evidence (skeleton: under `topology/`)
 Owns:
 - automated traffic scenarios
 - assertions
-- result collection
-- report generation
+- result collection orchestration
+- coordination with **`make test`** and **`phase_1_report`**
 
 ---
 
@@ -608,43 +661,44 @@ Below is a **clean implementation interface split** that matches the brief well.
 ## 9.1 Topology interface
 
 ### Contract
-The topology layer should expose one clear entry point:
+The skeleton implements this as **`class MyTopo(Topo)`** in **`topology/topology.py`**, with the `__main__` block constructing **`Mininet(topo=MyTopo(), switch=OVSSwitch, controller=RemoteController("c0", ip="127.0.0.1", port=6633), …)`**. Conceptually:
 
 ```text
-build_topology() -> running Mininet topology
+MyTopo() -> Mininet net + startup_services(net) + net.start()
 ```
 
 ### Inputs
-- node names
-- IP assignments
+- node names (must converge on **`sw1`…`sw3`**, **`napt`**, **`ids`**, **`lb1`**, **`h1`**, **`h2`**, **`llm*`**, **`insp`** per Figure 1)
+- IP assignments and masks
 - link definitions
-- default routes
+- default routes (often via **`10.0.0.1`** on the user side per PDF)
 
 ### Outputs
 - live Mininet network
-- predictable switch names / DPIDs
+- **DPIDs 1–6** consistent with `baseController.py` (three learning switches, then `napt`, `ids`, `lb1`)
 
 ---
 
 ## 9.2 Controller interface
 
 ### Contract
-The controller layer should expose logic conceptually equivalent to:
+The skeleton collapses this into a single POX listener: **`_handle_ConnectionUp(self, event)`** in `applications/controller/baseController.py`, conceptually equivalent to:
 
 ```text
-on_switch_connected(name, dpid)
-on_special_node_detected(name)
-launch_click_module(name, config)
-shutdown_modules()
+on_connection_up(dpid, connection):
+  if dpid in {1,2,3}: attach_learning_switch(connection)
+  elif dpid == 4: launch_click("/opt/pox/ext/napt.click", ...)
+  elif dpid == 5: launch_click("/opt/pox/ext/ids.click", ...)
+  elif dpid == 6: launch_click("/opt/pox/ext/lb1.click", ...)
 ```
 
 ### Inputs
-- Mininet/POX registration events
-- node identity (`sw1`, `sw2`, `sw3`, `napt`, `ids`, `lb1`)
+- OpenFlow datapath IDs (**must match** `topology.py` `dpid` strings)
+- Optional: extend `firstSeenAt` / logging if you need MAC learning telemetry (stub hooks exist)
 
 ### Outputs
-- switch control behavior
-- spawned Click processes
+- `LearningSwitch` instances for normal switches
+- spawned Click processes (logs under `/tmp/` in the skeleton)
 
 ---
 
@@ -669,7 +723,7 @@ emit report on teardown
 ## 9.4 Test interface
 
 ### Contract
-The results layer should expose automated scenarios such as:
+In the skeleton, implement scenarios under **`topology/topology_test.py`** (calling into **`topology/testing.py`** or other modules you add), for example:
 
 ```text
 test_ping_virtual_ip()
@@ -683,9 +737,9 @@ test_napt_translation()
 - traffic generators (`ping`, `curl`, Scapy, etc.)
 
 ### Outputs
-- pass/fail assertions
-- generated reports
-- final `phase_1_report`
+- pass/fail assertions (today the helpers always return `True`—replace with real checks)
+- generated Click reports (`*.report`)
+- final `phase_1_report` produced by a completed **`make test`** rule
 
 ---
 
@@ -707,7 +761,7 @@ A good final architecture keeps these boundaries clear:
 - **POX controller** = orchestration + switch control
 - **Click modules** = real network functions
 - **HTTP servers / inspector** = service endpoints
-- **results/tests** = validation and evidence
+- **Automated tests** (`topology/topology_test.py` in the skeleton; possibly `results/` in the final tarball) = validation and evidence
 
 ---
 
@@ -776,6 +830,7 @@ These are the main places where I had to infer structure rather than copy it dir
   So the "interfaces" section above is a **clean engineering interpretation**.
 - The brief strongly suggests POX mainly acts as **switch controller + Click launcher**, not as the place for NFV logic.
 - The brief defines the service chain clearly enough that `NAPT -> IDS -> LB -> servers` is the right runtime abstraction.
+- **Section #0** narrows those ideas to the **actual skeleton**: DPID-based `baseController.py`, `applications/` paths, Makefile copy into POX `ext/`, and tests colocated under `topology/` until/unless you reorganize for submission.
 
 ## Potential pitfalls / alternative interpretations
 
