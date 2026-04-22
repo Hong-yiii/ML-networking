@@ -36,8 +36,8 @@ class MyTopo(Topo):
         # You can update the topology as you see fit
 
         # Initialize hosts for user zone
-        h1 = self.addHost('h1', ip='10.0.0.50/24')
-        h2 = self.addHost('h2', ip='10.0.0.51/24')
+        h1 = self.addHost('h1', ip='10.0.0.50/24', defaultRoute='via 10.0.0.1')
+        h2 = self.addHost('h2', ip='10.0.0.51/24', defaultRoute='via 10.0.0.1')
         # Initialize switch for user zone
         s1 = self.addSwitch('s1', dpid="1")
         # Connect hosts to switch
@@ -61,8 +61,8 @@ class MyTopo(Topo):
 
         # Create inspection server for inferencing zone
         # TODO: Change IP to correct IP
-        insp = self.addHost('insp', ip='10.0.0.30/24')
-        # insp = self.addHost('insp', ip='100.0.0.30/24')
+        # insp = self.addHost('insp', ip='10.0.0.30/24')
+        insp = self.addHost('insp', ip='100.0.0.30/24', defaultRoute='via 100.0.0.1')
         
         # Connect inspection server to ids switch
         self.addLink(insp, ids)
@@ -79,13 +79,13 @@ class MyTopo(Topo):
 
         # Create inferencing servers 
         # TODO: Change IPs to correct IPs
-        llm1 = self.addHost('llm1', ip='10.0.0.40/24')
-        llm2 = self.addHost('llm2', ip='10.0.0.41/24')
-        llm3 = self.addHost('llm3', ip='10.0.0.42/24')
+        # llm1 = self.addHost('llm1', ip='10.0.0.40/24')
+        # llm2 = self.addHost('llm2', ip='10.0.0.41/24')
+        # llm3 = self.addHost('llm3', ip='10.0.0.42/24')
 
-        # llm1 = self.addHost('llm1', ip='100.0.0.40/24')
-        # llm2 = self.addHost('llm2', ip='100.0.0.41/24')
-        # llm3 = self.addHost('llm3', ip='100.0.0.42/24')
+        llm1 = self.addHost('llm1', ip='100.0.0.40/24', defaultRoute='via 100.0.0.45')
+        llm2 = self.addHost('llm2', ip='100.0.0.41/24', defaultRoute='via 100.0.0.45')
+        llm3 = self.addHost('llm3', ip='100.0.0.42/24', defaultRoute='via 100.0.0.45')
 
         # Connect inferencing servers to switch
         self.addLink(llm1, s3)
@@ -95,7 +95,18 @@ class MyTopo(Topo):
 def startup_services(net):
     # Start http services and executing commands you require on each host...
     ### COMPLETE THIS PART ###
-    pass
+    # Start HTTP servers on LLM nodes
+    for name in ['llm1', 'llm2', 'llm3']:
+        host = net.get(name)
+        host.cmd('mkdir -p /tmp/www')
+        # Create a few test pages
+        for i in range(1, 4):
+            host.cmd(f'echo "<html><body>Page {i} from {name}</body></html>" > /tmp/www/page{i}.html')
+        host.cmd('cd /tmp/www && python3 -m http.server 80 &')
+
+    # Start tcpdump on inspector to capture suspicious packets
+    insp = net.get('insp')
+    insp.cmd('tcpdump -i insp-eth0 -w /tmp/insp_capture.pcap &')
 
 
 
@@ -117,9 +128,10 @@ if __name__ == "__main__":
                   build=True,
                   cleanup=True)
 
-    startup_services(net)
     # Start the network
     net.start()
+
+    startup_services(net)
 
     # Start the CLI
     CLI(net)
