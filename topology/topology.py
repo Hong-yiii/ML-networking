@@ -39,25 +39,25 @@ class MyTopo(Topo):
         h1 = self.addHost('h1', ip='10.0.0.50/24', defaultRoute='via 10.0.0.1')
         h2 = self.addHost('h2', ip='10.0.0.51/24', defaultRoute='via 10.0.0.1')
         # Initialize switch for user zone
-        s1 = self.addSwitch('s1', dpid="1")
+        sw1 = self.addSwitch('sw1', dpid="1")
         # Connect hosts to switch
-        self.addLink(h1, s1)
-        self.addLink(h2, s1)
+        self.addLink(h1, sw1)
+        self.addLink(h2, sw1)
 
         # Initialize napt between user zone and inferencing zone
         napt = self.addSwitch('napt', dpid="4") # dpid is 4 because we have 3 normal switches in the topology
         # Connect user zone switch to napt
-        self.addLink(s1, napt)
+        self.addLink(sw1, napt)
 
         # Initalize access switch for inferencing zone
-        s2 = self.addSwitch('s2', dpid="2")
+        sw2 = self.addSwitch('sw2', dpid="2")
         # Connect napt to access switch
-        self.addLink(napt, s2)
+        self.addLink(napt, sw2)
 
         # Initialize ids switch for inferencing zone
         ids = self.addSwitch('ids', dpid="5") # dpid is 5 because we have 3 normal switches and 1 napt switch in the topology
         # Connect access switch to ids switch
-        self.addLink(s2, ids)
+        self.addLink(sw2, ids)
 
         # Create inspection server for inferencing zone
         # TODO: Change IP to correct IP
@@ -73,9 +73,9 @@ class MyTopo(Topo):
         self.addLink(ids, lb1)
 
         # Create switch to connect load balancer to inferencing servers
-        s3 = self.addSwitch('s3', dpid="3")
+        sw3 = self.addSwitch('sw3', dpid="3")
         # Connect load balancer to switch
-        self.addLink(lb1, s3)
+        self.addLink(lb1, sw3)
 
         # Create inferencing servers 
         # TODO: Change IPs to correct IPs
@@ -88,9 +88,9 @@ class MyTopo(Topo):
         llm3 = self.addHost('llm3', ip='100.0.0.42/24', defaultRoute='via 100.0.0.45')
 
         # Connect inferencing servers to switch
-        self.addLink(llm1, s3)
-        self.addLink(llm2, s3)
-        self.addLink(llm3, s3)
+        self.addLink(llm1, sw3)
+        self.addLink(llm2, sw3)
+        self.addLink(llm3, sw3)
 
 def startup_services(net):
     # Start http services and executing commands you require on each host...
