@@ -444,6 +444,191 @@ Owns:
 
 ---
 
+## Phase 1 work breakdown (five-way)
+
+The following is merged from the team document **`IK2221_Phase1_Work_Breakdown.docx`** (local copy may live under `Downloads/`). **Confirm the submission deadline on Canvas** if it differs.
+
+**Deadline (from doc):** April 29, 2026 at 17:00.
+
+### Overview
+
+Deliver three Click modules (**NAPT**, **IDS**, **load balancer**), a correct Mininet topology, automated tests, and per-function **`.report`** files plus **`phase_1_report`**.
+
+### Status snapshot
+
+**Already in place (skeleton + partial updates)**
+
+- Switches, hosts, links, IPs in `topology/topology.py` (iterate until Figure 1 matches)
+- Controller wiring: `applications/controller/baseController.py`, `applications/controller/click_wrapper.py`
+- HTTP servers on `llm1`–`llm3`, `tcpdump` on inspector (`startup_services`)
+- Basic test scaffolding: `topology/topology_test.py`, `topology/testing.py`
+
+**Still to build**
+
+- Real **`napt.click`** — address/port translation
+- Real **`ids.click`** — HTTP inspection and redirect to `insp`
+- Real **`lb1.click`** — VIP, round-robin, rewrites, ICMP to VIP
+- Full automated test suite and strict pass/fail assertions
+- **AverageCounter** / **Counter** placement and **DriverManager** → **`napt.report`**, **`ids.report`**, **`lb1.report`**
+- **`Makefile`** `test` rule and fully generated **`phase_1_report`**
+
+### Person 1 — Topology, hosts, and test framework
+
+**Status:** mostly scaffolding done; expand and harden.
+
+**Done / started**
+
+- IPs and default gateways for `h1`, `h2`, `insp`, `llm1`–`llm3` in `topology.py`
+- `startup_services(net)` — HTTP on LLMs, `tcpdump` on inspector
+- `ping()` / `curl()` in `testing.py` with pass/fail logic (verify return values propagate correctly)
+- Initial cases in `topology_test.py`
+
+**Remaining**
+
+- Ensure helpers return **`passed`** (not a stub `True`) everywhere assertions matter
+- Ensure **`startup_services(net)`** runs only after **`net.start()`** in every entry path (`topology_test.py`, `Makefile` flow, etc.)
+- Expand **`topology_test.py`**: all relevant HTTP methods, injection payloads, round-robin checks
+- Add **`index.html`** (or equivalent) in the LLM web root so bare **`curl`** to `/` returns content
+- Wire / complete **`make test`** in the root **`Makefile`**
+
+**Test cases to cover (checklist)**
+
+| Scenario | Expectation |
+|-----------|----------------|
+| `h1` ping `h2` | Same subnet; should succeed |
+| `h1` ping `100.0.0.45` | Virtual service IP through NAPT + LB ICMP path |
+| `POST` / `PUT` to `100.0.0.45:80` | IDS allows → reaches backends via LB |
+| `GET`, `HEAD`, `DELETE`, `OPTIONS`, `TRACE`, `CONNECT` to VIP | IDS blocks / sends to inspector per spec |
+| `PUT` with injection payloads | Substrings such as `cat /etc/passwd`, `cat /var/log/`, `INSERT`, `UPDATE`, `DELETE` → inspector path |
+| Round-robin | Several requests; observe different backends handling load |
+
+### Person 2 — NAPT (`napt.click`)
+
+**Goal:** Translate between **`10.0.0.0/24`** (user zone) and **`100.0.0.0/24`** (inferencing zone) for the traffic classes required in the brief.
+
+**Interfaces (naming)**
+
+- **`napt-eth1`** — user side, logical **`10.0.0.1`**
+- **`napt-eth2`** — inferencing side, logical **`100.0.0.1`**
+
+**Implementation outline**
+
+1. **FromDevice** / **ToDevice** on both interfaces (extend skeleton).
+2. **Classifier** on each side — e.g. Ethernet type at offset 12: ARP (`0806`), IPv4 (`0800`), else other.
+3. **ARP** — **ARPResponder** per side for that interface’s IP; tie **ARPQuerier** so outbound IP gets correct Ethernet headers.
+4. **TCP** — **IPRewriter** with patterns for outbound (e.g. user hosts → `100.0.0.1` ephemeral range) and reverse inbound.
+5. **ICMP echo** — **ICMPPingRewriter** for request/reply across subnets.
+6. **Drop** non-ARP / non-TCP / non-ICMP-echo as allowed by the brief.
+7. **Metrics** — **AverageCounter** immediately after each **FromDevice** and before each **ToDevice**; **Counter** per traffic class.
+8. **DriverManager** — on shutdown, print counters to **`napt.report`**.
+
+**Key Click elements:** Classifier, ARPResponder, ARPQuerier, IPRewriter, ICMPPingRewriter.
+
+### Person 3 — Load balancer (`lb1.click`)
+
+**Goal:** Expose virtual service **`100.0.0.45:80`**, round-robin to **`llm1`** (`100.0.0.40`), **`llm2`** (`.41`), **`llm3`** (`.42`), and answer **ping** to the VIP.
+
+**Interfaces**
+
+- **`lb1-eth1`** — toward clients (IDS side)
+- **`lb1-eth2`** — toward **`sw3`** / servers
+
+**Implementation outline**
+
+1. Per-interface classification — ARP request vs ARP reply vs IPv4 vs other (doc used patterns such as `Classifier(12/0806 20/0001, 12/0806 20/0002, 12/0800, -)`; align with your exact framing).
+2. **ARP requests** for VIP — **ARPResponder** with a chosen virtual MAC (example from doc: `02:00:00:00:00:45`).
+3. **ARP replies** — into **ARPQuerier** elements (one per interface).
+4. **IP toward servers (`eth1`)** — if dest IP ≠ VIP, drop; if ICMP, answer echo per spec; if TCP `:80`, **IPRewriter** + **RoundRobinIPMapper** across the three backends.
+5. **IP toward clients (`eth2`)** — same rewriter reverses source addresses to **`100.0.0.45`**.
+6. Discard non-ARP / non-IP where required.
+7. Counters — ARP req/reply, service traffic, ICMP, drops (see project Table 1).
+8. **DriverManager** → **`lb1.report`** (rates, totals per class).
+
+### Person 4 — IDS (`ids.click`)
+
+**Goal:** Transparent bridge; inspect **HTTP**; allow only **POST** and safe **PUT**; suspicious traffic to **`insp`**.
+
+**Interfaces (three-port)**
+
+- **`ids-eth1`** — toward **`sw2`** (from NAPT / user direction)
+- **`ids-eth3`** — toward **`lb1`**
+- **`ids-eth2`** — toward **`insp`** (inspector)
+
+**Implementation outline**
+
+1. From **`eth1`**, classify: ARP, ICMP, TCP control, HTTP (TCP 80 with payload), other (**IPClassifier** and related elements).
+2. **Transparent pass-through:** ARP, ICMP, TCP signaling — **`eth1` ↔ `eth3`** bidirectionally without payload inspection.
+3. **HTTP from clients:** parse method via **Classifier** on known method spellings (hex patterns at the HTTP start — e.g. `POST` / `PUT` / `GET` / … as specified in the course material).
+4. **POST** → forward to **`eth3`**.
+5. **PUT** → use **Search** (or equivalent) for the HTTP header terminator **`\r\n\r\n`** (hex `0d0a0d0a`) to locate body start; **Classifier** on first body bytes for injection keywords (`cat /etc/passwd`, `cat /var/log/`, `INSERT`, `UPDATE`, `DELETE` per brief). Match → **`eth2`**; no match → **`eth3`**.
+6. Other methods → **`eth2`**.
+7. **Responses `eth3` → `eth1`:** forward without HTTP inspection.
+8. Counters per class + **AverageCounter** placement; **DriverManager** → **`ids.report`**.
+
+**Notes**
+
+- Use **Classifier** / hex for keyword detection at the payload start; **Search** is for advancing the pointer, not for scanning the whole packet for each keyword.
+- Treat as the **most intricate** Click graph — start early.
+
+### Person 5 — Integration, reporting, and Makefile
+
+**Goal:** **`make test`** runs end-to-end; every Click module emits **`.report`**; submission layout is correct.
+
+**Tasks**
+
+1. **`Makefile` `test`** — e.g. `make clean`, start controller in background, wait until ready, run **`topology_test.py`**, capture **stdout/stderr** to **`phase_1_report`**, tear down processes cleanly.
+2. Support NFV owners with counter/report templates: **AverageCounter** after every **FromDevice** and before every **ToDevice**; **Counter** per traffic class; **DriverManager** printing to **`<function>.report`** on exit.
+3. Verify report fields against the project table (rates, totals per class, drops).
+4. **Tarball** naming: **`ik2221-assign-phase1-teamN.tar.gz`** with required internal layout.
+5. End-to-end sweeps once all Click graphs exist.
+6. Fill **`MEMBERS`** (name + KTH email per line / as Canvas specifies).
+
+### Submission folder structure (from doc)
+
+Use **exact** names if the autograder expects this tree; otherwise mirror **Canvas** instructions.
+
+```text
+ik2221-assign-phase1-teamN/
+├── MEMBERS
+├── Makefile
+├── README
+├── topology/              # topology.py, topology_test.py, testing.py
+├── applications/
+│   ├── controller/        # baseController.py, click_wrapper.py
+│   └── nfv/               # napt.click, ids.click, lb1.click
+└── results/               # optional: extra scripts; phase_1_report output location per Makefile
+```
+
+*This repo’s skeleton may keep tests under `topology/` instead of `results/` — align the tarball with whatever the course VM checker enforces.*
+
+### Suggested timeline (from doc)
+
+| When | Focus |
+|------|--------|
+| Now – Apr 25 | Persons 2–4 start Click; Person 5 Makefile `test` + reporting templates |
+| Apr 25–27 | Click modules mostly working; Person 1 expands tests; Person 5 integration |
+| Apr 27–28 | Full `make test`, bugfixes, verify all **`.report`** files |
+| Apr 28–29 | Cleanup, **MEMBERS**, tarball, submit before **17:00** |
+
+### Important reminders (from doc)
+
+- **Individual evaluation:** every member must be able to explain any subsystem in discussion.
+- **Naming and layout** matter for automated grading.
+- **No exotic Python packages** — stick to the course VM.
+- **Plagiarism** checks apply to submissions.
+
+### Condensed three-person variant (optional)
+
+If the team has only three contributors, merge roles as follows:
+
+| Combined role | Takes doc roles |
+|----------------|-----------------|
+| **A — Infra + control + tests** | Person 1 + parts of Person 5 (topology, `startup_services`, `topology_test.py` / `testing.py`, test expansion) |
+| **B — NAPT** | Person 2 |
+| **C — IDS + LB + integration** | Person 3 + Person 4 + remainder of Person 5 (`lb1.click`, `ids.click`, `Makefile` / `phase_1_report`, tarball, **MEMBERS**) |
+
+---
+
 # 7. Internal architecture of each NFV component
 
 ## 7.1 NAPT internal architecture
