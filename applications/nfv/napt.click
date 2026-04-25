@@ -1,3 +1,7 @@
+// =============================================================================
+// MOCK / STUB — transparent L2 bridge for LB-only and incremental testing.
+// Replace with real NAPT (IPRewriter + ICMPPingRewriter + ARP) for submission.
+// =============================================================================
 // 2 variables to hold ports names
 define($PORT1 napt-eth1, $PORT2 napt-eth2)
 //require(library ./forwarder.click)

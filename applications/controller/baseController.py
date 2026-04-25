@@ -1,3 +1,4 @@
+import os
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 from pox.lib.addresses import IPAddr
@@ -58,7 +59,11 @@ class controller (object):
             # This is the Load Balancer switch
             # You should run the Load Balancer module click node (/TODO Replace lb1.click with your load balancer implementation)
             log.info("Starting Load Balancer")
-            self.devices[id] = click_wrapper.start_click("/opt/pox/ext/lb1.click", "", "/tmp/lb1.stdout", "/tmp/lb1.stderr")
+            lb_out = os.environ.get("IK2221_LB_REPORT", "/tmp/lb1.report")
+            lb_err = os.environ.get("IK2221_LB_STDERR", "/tmp/lb1.stderr")
+            self.devices[id] = click_wrapper.start_click(
+                "/opt/pox/ext/lb1.click", "", lb_out, lb_err
+            )
         else:
             # Error
             log.error("Unknown device connected to the controller")

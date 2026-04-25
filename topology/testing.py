@@ -22,7 +22,7 @@ def curl(client, server, method="GET", payload="", port=80, expected=True):
         return True in case of success, False if not
         """
 
-        if (isinstance(server, str) == 0):
+        if not isinstance(server, str):
             server_ip = str(server.IP())
         else:
             # If it's a string it should be the IP address of the node (e.g., the load balancer)
