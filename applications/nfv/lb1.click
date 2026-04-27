@@ -1,7 +1,15 @@
-// lb1.click — Load balancer (IK2221 Phase 1)
-// VIP 100.0.0.45:80, round-robin to 100.0.0.40–42; ICMP echo to VIP.
-// lb1-eth1 = client/IDS side; lb1-eth2 = server (sw3) side.
-// Set interface MACs in Mininet (see topology startup_services) to match $MAC1 / $MAC2.
+// lb1.click — Load Balancer (IK2221 Phase 1)
+// VIP 100.0.0.45:80, round-robin to llm1(100.0.0.40), llm2(.41), llm3(.42).
+// lb1-eth1 = client/IDS side;  lb1-eth2 = server/sw3 side.
+//
+// Mininet startup_services sets lb1-eth1 MAC = 02:00:00:00:01:45
+//                              lb1-eth2 MAC = 02:00:00:00:02:45
+//
+// Proxy-ARP on eth2 (100.0.0.0/24): the LLM servers send replies toward 100.0.0.1
+// (the NAPT inf-side address), which is in the same /24. Without proxy-ARP, their
+// ARP for 100.0.0.1 goes unanswered and the return path breaks. lb1 answers for the
+// whole inferencing subnet so all return traffic is intercepted and rewritten by
+// the IPRewriter mapping table.
 
 define($ETH1 lb1-eth1, $ETH2 lb1-eth2)
 define($VIP 100.0.0.45)
@@ -9,21 +17,25 @@ define($MAC1 02-00-00-00-01-45)
 define($MAC2 02-00-00-00-02-45)
 
 AddressInfo(
-  lb1_out  $VIP  100.0.0.0/24  $MAC1,
-  lb2_out  $VIP  100.0.0.0/24  $MAC2
+  lb1_client  $VIP  100.0.0.0/24  $MAC1,
+  lb1_server  $VIP  100.0.0.0/24  $MAC2
 );
 
+// Round-robin mapper: new client→VIP flows are distributed across the three backends.
+// Pattern format: SADDR SPORT DADDR DPORT FOUTPUT ROUTPUT
+// "-" keeps the original field. Forward exits at 0, reverse at 1.
 rr :: RoundRobinIPMapper(
   "- - 100.0.0.40 80 0 1",
   "- - 100.0.0.41 80 0 1",
   "- - 100.0.0.42 80 0 1"
 );
 
-// Input 0: new client flows; input 1: return traffic (mapping table consulted first).
+// IPRewriter input 0: new client flows (apply rr mapper).
+// IPRewriter input 1: server return flows (hit reverse mapping, rewrite src back to VIP).
 tcp_rw :: IPRewriter(rr, pass 1);
 
-arq1 :: ARPQuerier(lb1_out);
-arq2 :: ARPQuerier(lb2_out);
+arq1 :: ARPQuerier(lb1_client);   // resolves MACs on the client/IDS side
+arq2 :: ARPQuerier(lb1_server);   // resolves MACs on the server/sw3 side
 
 elementclass Meter {
   input -> ac::AverageCounter -> cnt::Counter -> output;
@@ -51,94 +63,112 @@ cnt_drop_s     :: Counter;
 cnt_other_l2_c :: Counter;
 cnt_other_l2_s :: Counter;
 
+// ---- Client side (eth1) -----------------------------------------------
 fd1 -> m1_in -> c1 :: Classifier(12/0806 20/0001, 12/0806 20/0002, 12/0800, -);
-fd2 -> m2_in -> c2 :: Classifier(12/0806 20/0001, 12/0806 20/0002, 12/0800, -);
 
-// Merge Ethernet sources bound for eth1 (ARPResponder is FIFO[0], ARPQuerier is LIFO[1]).
+// MixedQueue merges two push sources into one pull stream toward ToDevice.
 eth1_tx :: MixedQueue(2048);
-// Merge IP streams into one ARPQuerier (TCP replies FIFO, ICMP replies LIFO).
+// Fan-in for IP traffic destined back to the client: ICMP replies + TCP return flows.
 ip_to_arq1 :: MixedQueue(2048);
 
-c1[0]  -> cnt_arp_req_c
+// ARP request for VIP → answer immediately with MAC1
+c1[0] -> cnt_arp_req_c
        -> ARPResponder($VIP/32 $MAC1)
        -> [0]eth1_tx;
 
-c1[1]  -> cnt_arp_rep_c
+// ARP reply → update ARPQuerier cache
+c1[1] -> cnt_arp_rep_c
        -> [1]arq1;
 
-c1[2]  -> Strip(14)
+// IPv4: strip Ethernet, validate IP header, then classify
+c1[2] -> Strip(14)
        -> MarkIPHeader(0)
        -> CheckIPHeader(INTERFACES 100.0.0.0/24)
-       -> ipc :: IPClassifier(dst host $VIP and icmp type echo,
-                              dst host $VIP and tcp dst port 80,
-                              -);
+       -> ipc :: IPClassifier(
+              dst host $VIP and icmp type echo,
+              dst host $VIP and tcp dst port 80,
+              -);
 
+// ICMP echo to VIP → synthesise reply locally
 ipc[0] -> cnt_icmp_echo
        -> icmppr :: ICMPPingResponder;
-icmppr[0] -> [1]ip_to_arq1;
+icmppr[0] -> [1]ip_to_arq1;  // reply IP packet → fan-in → arq1
 icmppr[1] -> Discard;
 
+// TCP to VIP:80 → round-robin rewrite
 ipc[1] -> cnt_svc_tcp_c
        -> [0]tcp_rw;
 
+// Other IP to eth1 → drop
 ipc[2] -> cnt_drop_c
        -> Discard;
 
-c1[3]  -> cnt_other_l2_c
+// Non-IP/non-ARP → drop
+c1[3] -> cnt_other_l2_c
        -> Discard;
 
+// IPRewriter reverse output (server→client after VIP rewrite) → arq1 → eth1
 tcp_rw[1] -> [0]ip_to_arq1;
 ip_to_arq1 -> [0]arq1 -> [1]eth1_tx;
 eth1_tx -> m1_out -> td1;
 
-// ---- Server side (eth2) ----------------------------------------------
+// ---- Server side (eth2) -----------------------------------------------
 eth2_tx :: MixedQueue(2048);
 
-c2[0]  -> cnt_arp_req_s
-       -> ARPResponder($VIP/32 $MAC2)
+fd2 -> m2_in -> c2 :: Classifier(12/0806 20/0001, 12/0806 20/0002, 12/0800, -);
+
+// Proxy-ARP for the whole inferencing subnet: LLM servers send replies addressed
+// to 100.0.0.1 (NAPT inf side, same /24). lb1 answers all such ARP requests with
+// MAC2 so return traffic is delivered here and hits the IPRewriter reverse mapping.
+c2[0] -> cnt_arp_req_s
+       -> ARPResponder(100.0.0.0/24 $MAC2)
        -> [0]eth2_tx;
 
-c2[1]  -> cnt_arp_rep_s
+c2[1] -> cnt_arp_rep_s
        -> [1]arq2;
 
-c2[2]  -> Strip(14)
+c2[2] -> Strip(14)
        -> MarkIPHeader(0)
        -> CheckIPHeader(INTERFACES 100.0.0.0/24)
        -> ips :: IPClassifier(tcp, -);
 
+// TCP from server → IPRewriter input 1 (reverse mapping lookup)
 ips[0] -> [1]tcp_rw;
 
+// Non-TCP from server → drop
 ips[1] -> cnt_drop_s
        -> Discard;
 
-c2[3]  -> cnt_other_l2_s
+c2[3] -> cnt_other_l2_s
        -> Discard;
 
+// IPRewriter forward output (client→backend, dst rewritten to llm) → arq2 → eth2
 tcp_rw[0] -> [0]arq2 -> [1]eth2_tx;
 eth2_tx -> m2_out -> td2;
 
 ScheduleInfo(fd1 .1, td1 1, fd2 .1, td2 1);
 
 DriverManager(
-  print "=================== LB1 Report ===================",
-  print "eth1 in avg pps:", $(m1_in/ac.rate),
-  print "eth1 in pkts:", $(m1_in/cnt.count),
-  print "eth2 in avg pps:", $(m2_in/ac.rate),
-  print "eth2 in pkts:", $(m2_in/cnt.count),
-  print "eth1 out avg pps:", $(m1_out/ac.rate),
-  print "eth1 out pkts:", $(m1_out/cnt.count),
-  print "eth2 out avg pps:", $(m2_out/ac.rate),
-  print "eth2 out pkts:", $(m2_out/cnt.count),
-  print "ARP requests (client if):", $(cnt_arp_req_c.count),
-  print "ARP replies (client if):", $(cnt_arp_rep_c.count),
-  print "ARP requests (server if):", $(cnt_arp_req_s.count),
-  print "ARP replies (server if):", $(cnt_arp_rep_s.count),
-  print "Service TCP (client->VIP:80):", $(cnt_svc_tcp_c.count),
-  print "ICMP echo to VIP:", $(cnt_icmp_echo.count),
-  print "Dropped IP (client if, non-echo/non-:80):", $(cnt_drop_c.count),
-  print "Dropped IP (server if, non-TCP):", $(cnt_drop_s.count),
-  print "Non-IP/L2 drops (eth1):", $(cnt_other_l2_c.count),
-  print "Non-IP/L2 drops (eth2):", $(cnt_other_l2_s.count),
-  print "IPRewriter mapping failures:", $(tcp_rw.mapping_failures),
+  print "LB1 starting (VIP=100.0.0.45 → llm1/llm2/llm3)",
   pause,
+  print "=================== LB1 Report ===================",
+  print "eth1 in  avg pps:              ", $(m1_in/ac.rate),
+  print "eth1 in  total pkts:           ", $(m1_in/cnt.count),
+  print "eth2 in  avg pps:              ", $(m2_in/ac.rate),
+  print "eth2 in  total pkts:           ", $(m2_in/cnt.count),
+  print "eth1 out avg pps:              ", $(m1_out/ac.rate),
+  print "eth1 out total pkts:           ", $(m1_out/cnt.count),
+  print "eth2 out avg pps:              ", $(m2_out/ac.rate),
+  print "eth2 out total pkts:           ", $(m2_out/cnt.count),
+  print "ARP requests  (client side):   ", $(cnt_arp_req_c.count),
+  print "ARP replies   (client side):   ", $(cnt_arp_rep_c.count),
+  print "ARP requests  (server side):   ", $(cnt_arp_req_s.count),
+  print "ARP replies   (server side):   ", $(cnt_arp_rep_s.count),
+  print "Service TCP   (client→VIP:80): ", $(cnt_svc_tcp_c.count),
+  print "ICMP echo to VIP:              ", $(cnt_icmp_echo.count),
+  print "IP drops      (client side):   ", $(cnt_drop_c.count),
+  print "IP drops      (server side):   ", $(cnt_drop_s.count),
+  print "L2 drops      (client side):   ", $(cnt_other_l2_c.count),
+  print "L2 drops      (server side):   ", $(cnt_other_l2_s.count),
+  print "IPRewriter mapping failures:   ", $(tcp_rw.mapping_failures),
 );

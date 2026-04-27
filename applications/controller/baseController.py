@@ -1,16 +1,11 @@
 import os
+import datetime
+import time
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
-from pox.lib.addresses import IPAddr
 from pox.lib.util import dpid_to_str
-import pox.lib.packet as pkt
 from forwarding.l2_learning import LearningSwitch
-import subprocess
-import shlex
-import datetime
 import click_wrapper
-import time
-import os
 
 log = core.getLogger()
 
@@ -29,15 +24,23 @@ class controller (object):
             self.devices[id] = LearningSwitch(event.connection, False)
         elif id == 4:
             log.info("Starting NAPT")
-            self.devices[id] = click_wrapper.start_click("/opt/pox/ext/napt.click", "", "/tmp/napt.stdout", "/tmp/napt.stderr")
+            napt_out = os.environ.get("IK2221_NAPT_REPORT", "/tmp/napt.report")
+            napt_err = os.environ.get("IK2221_NAPT_STDERR", "/tmp/napt.stderr")
+            self.devices[id] = click_wrapper.start_click(
+                "/opt/pox/ext/napt.click", "", napt_out, napt_err
+            )
         elif id == 5:
-            log.info("Starting IDS - waiting for interface...")
+            log.info("Starting IDS — waiting for ids-eth1 to appear...")
             for i in range(20):
                 if os.path.exists('/sys/class/net/ids-eth1'):
                     break
                 time.sleep(1)
             log.info("IDS interface ready, starting Click")
-            self.devices[id] = click_wrapper.start_click("/opt/pox/ext/ids.click", "", "/tmp/ids.stdout", "/tmp/ids.stderr")
+            ids_out = os.environ.get("IK2221_IDS_REPORT", "/tmp/ids.report")
+            ids_err = os.environ.get("IK2221_IDS_STDERR", "/tmp/ids.stderr")
+            self.devices[id] = click_wrapper.start_click(
+                "/opt/pox/ext/ids.click", "", ids_out, ids_err
+            )
         elif id == 6:
             log.info("Starting Load Balancer")
             lb_out = os.environ.get("IK2221_LB_REPORT", "/tmp/lb1.report")
