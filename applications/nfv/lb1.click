@@ -68,8 +68,8 @@ fd1 -> m1_in -> c1 :: Classifier(12/0806 20/0001, 12/0806 20/0002, 12/0800, -);
 
 // MixedQueue merges two push sources into one pull stream toward ToDevice.
 eth1_tx :: MixedQueue(2048);
-// Fan-in for IP traffic destined back to the client: ICMP replies + TCP return flows.
-ip_to_arq1 :: MixedQueue(2048);
+// ICMP + TCP return toward the client: both are push; fan in directly to ARPQuerier[0]
+// (MixedQueue is pull output → incompatible with ARPQuerier push input; see napt.click).
 
 // ARP request for VIP → answer immediately with MAC1
 c1[0] -> cnt_arp_req_c
@@ -92,7 +92,7 @@ c1[2] -> Strip(14)
 // ICMP echo to VIP → synthesise reply locally
 ipc[0] -> cnt_icmp_echo
        -> icmppr :: ICMPPingResponder;
-icmppr[0] -> [1]ip_to_arq1;  // reply IP packet → fan-in → arq1
+icmppr[0] -> [0]arq1;  // IP reply → same push input as TCP reverse
 icmppr[1] -> Discard;
 
 // TCP to VIP:80 → round-robin rewrite
@@ -108,8 +108,8 @@ c1[3] -> cnt_other_l2_c
        -> Discard;
 
 // IPRewriter reverse output (server→client after VIP rewrite) → arq1 → eth1
-tcp_rw[1] -> [0]ip_to_arq1;
-ip_to_arq1 -> [0]arq1 -> [1]eth1_tx;
+tcp_rw[1] -> [0]arq1;
+arq1 -> [1]eth1_tx;
 eth1_tx -> m1_out -> td1;
 
 // ---- Server side (eth2) -----------------------------------------------
