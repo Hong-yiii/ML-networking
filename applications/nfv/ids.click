@@ -1,42 +1,80 @@
-// =============================================================================
-// MOCK / STUB — two-port L2 bridge. Real IDS needs a third port to insp and
-// HTTP inspection. Kept for LB-only topologies and staged development.
-// =============================================================================
-// 2 variables to hold ports names
-define($PORT1 ids-eth1, $PORT2 ids-eth3)
+define($PORT1 ids-eth1)
+define($PORT2 ids-eth2)
+define($PORT3 ids-eth3)
 
-// Script will run as soon as the router starts
-Script(print "Click forwarder on $PORT1 $PORT2")
+Script(print "IDS starting on $PORT1 $PORT2 $PORT3")
 
-// Group common elements in a single block. $port is a parameter used just to print
-elementclass L2Forwarder {$port|
-	input
-	->cnt::Counter
-        ->Print
-	->Queue
-	->output
-}
-
-// From where to pick packets
 fd1::FromDevice($PORT1, SNIFFER false, METHOD LINUX, PROMISC true)
 fd2::FromDevice($PORT2, SNIFFER false, METHOD LINUX, PROMISC true)
+fd3::FromDevice($PORT3, SNIFFER false, METHOD LINUX, PROMISC true)
 
-// Where to send packets
 td1::ToDevice($PORT1, METHOD LINUX)
 td2::ToDevice($PORT2, METHOD LINUX)
+td3::ToDevice($PORT3, METHOD LINUX)
 
-// Instantiate 2 forwarders, 1 per directions
-fd1->fwd1::L2Forwarder($PORT1)->td2
-fd2->fwd2::L2Forwarder($PORT2)->td1
+q1::Queue -> td1
+q2::Queue -> td2
+q3::Queue -> td3
 
+fd1 -> ac_in1::AverageCounter -> cl1::Classifier(
+    12/0806,
+    12/0800 23/01,
+    12/0800 23/06,
+    -
+);
 
-// Print something on exit
-// DriverManager will listen on router's events
-// The pause instruction will wait until the process terminates
-// Then the prints will run an Click will exit
+fd3 -> ac_in3::AverageCounter -> q1
+fd2 -> ac_in2::AverageCounter -> q1
+
+cl1[0] -> cnt_arp::Counter -> q3
+cl1[1] -> cnt_icmp::Counter -> q3
+cl1[3] -> cnt_drop::Counter -> Discard
+
+cl1[2] -> ipc::IPClassifier(
+    dst port 80,
+    src port 80,
+    -
+);
+
+ipc[1] -> cnt_resp::Counter -> q3
+ipc[2] -> cnt_tcpsig::Counter -> q3
+
+ipc[0] -> method_cl::Classifier(
+    54/504f5354,
+    54/50555420,
+    -
+);
+
+method_cl[0] -> cnt_post::Counter -> q3
+method_cl[2] -> cnt_blocked::Counter -> q2
+
+method_cl[1] -> cnt_put::Counter -> payload_cl::Classifier(
+    54/636174202f6574632f706173737764,
+    54/636174202f7661722f6c6f672f,
+    54/494e53455254,
+    54/555044415445,
+    54/44454c455445,
+    -
+);
+
+payload_cl[0] -> cnt_malicious::Counter -> q2
+payload_cl[1] -> cnt_malicious
+payload_cl[2] -> cnt_malicious
+payload_cl[3] -> cnt_malicious
+payload_cl[4] -> cnt_malicious
+payload_cl[5] -> cnt_put_clean::Counter -> q3
+
 DriverManager(
-        print "Router starting",
-        pause,
-	print "Packets from ${PORT1}: $(fwd1/cnt.count)",
-	print "Packets from ${PORT2}: $(fwd2/cnt.count)",
+    print "IDS starting",
+    pause,
+    print "=== IDS Report ===",
+    print "ARP: $(cnt_arp.count)",
+    print "ICMP: $(cnt_icmp.count)",
+    print "TCP signaling: $(cnt_tcpsig.count)",
+    print "HTTP responses: $(cnt_resp.count)",
+    print "HTTP POST allowed: $(cnt_post.count)",
+    print "HTTP PUT clean: $(cnt_put_clean.count)",
+    print "HTTP PUT malicious: $(cnt_malicious.count)",
+    print "HTTP blocked methods: $(cnt_blocked.count)",
+    print "Dropped: $(cnt_drop.count)",
 )

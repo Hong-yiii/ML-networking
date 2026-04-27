@@ -107,7 +107,7 @@ def startup_services(net):
 
     # Start tcpdump on inspector to capture suspicious packets
     insp = net.get('insp')
-    insp.cmd('tcpdump -i insp-eth0 -w /tmp/insp_capture.pcap &')
+    insp.cmd('rm -f /tmp/insp_capture.pcap && tcpdump -i insp-eth0 -w /tmp/insp_capture.pcap &')
 
     # Match lb1.click AddressInfo / ARPResponder MACs (Click does not learn these from Linux).
     lb = net.get('lb1')
