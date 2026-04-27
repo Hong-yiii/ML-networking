@@ -1,3 +1,135 @@
+# IK2221 Phase 1 — NFV for a mini “LLM inference” edge
+
+This repository is the **course Phase 1** deliverable for *Network Function Virtualization*: a Mininet emulation of a small WAN-style edge where **users** in a private zone reach a **virtual HTTP service** for an inferencing cluster, while **NAPT**, an **IDS**, and a **load balancer** sit on the path as real data-plane functions (Click), coordinated by **POX** on ordinary OpenFlow learning switches.
+
+The assignment briefing frames this as practice for infrastructure you might later use to **load-balance inference servers** (for example for LLMs). The “LLMs” here are emulated by lightweight **Python HTTP servers** on three backends; the interesting part is not the models but the **NFV chain**: address translation, security policy in front of the VIP, and symmetric rewriting so clients only ever see **one service IP**.
+
+---
+
+## What the brief asks you to think about
+
+From the project PDF, the design intent is:
+
+1. **Two trust / addressing regions**  
+   **User zone (UZ)** hosts live in `10.0.0.0/24` behind a **NAPT**. The **inferencing zone (IZ)** uses `100.0.0.0/24`. Hosts in UZ must not expose their private addresses toward IZ; the NAPT is the only “public face” from that side.
+
+2. **A virtual service, not a real host**  
+   HTTP is offered at **`100.0.0.45:80`**. That address does not belong to a single Mininet host; **`lb1` (the load balancer)** owns it in ARP and in IP rewriting. Clients resolve and talk to the VIP; the **round-robin** choice of `llm1`–`llm3` is hidden.
+
+3. **Security in-line before the VIP**  
+   The **IDS** is a bump-in-the-wire **sniffer** (no IP of its own). It must **forward ARP, ICMP, and TCP signaling** transparently, but for **HTTP requests** it enforces method policy and **payload checks**: only certain methods are allowed toward the balancer; suspicious patterns are **diverted to `insp`** for PCAP evidence.
+
+4. **Default deny for “everything else”**  
+   Aside from the allowed paths (including **ICMP echo to the VIP**, handled by the load balancer per spec), other traffic is out of scope or should be blocked—your Click classifiers and POX’s L2 switches together realize that policy.
+
+5. **Split control plane vs data plane**  
+   **POX** speaks OpenFlow to **OVS** on `sw1`–`sw3` (learning switches). When the **NAPT**, **IDS**, and **LB** switches register, POX **starts Click** on those nodes instead of installing flow rules—classic **NFV**: the “function” runs in userspace on the switch namespace’s interfaces.
+
+---
+
+## Topology and traffic flow (conceptual)
+
+The figure in the PDF is essentially a **serial pipeline** from users to backends: users → **sw1** → **napt** → **sw2** → **ids** → **lb1** → **sw3** → **llm\***. The inspector **`insp`** hangs off the IDS switch as a **sink** for redirected packets.
+
+```mermaid
+flowchart LR
+  subgraph UZ[User zone — private]
+    h1[h1]
+    h2[h2]
+    sw1[sw1 L2]
+  end
+  subgraph edge[Addressing boundary]
+    napt[NAPT Click\n10.0.0.1 ↔ 100.0.0.1]
+  end
+  subgraph IZ[Inferencing zone — service subnet]
+    sw2[sw2 L2]
+    ids[IDS Click\npolicy + divert]
+    insp[insp PCAP]
+    lb1[LB Click\nVIP 100.0.0.45]
+    sw3[sw3 L2]
+    llm[llm1–llm3 HTTP]
+  end
+  h1 & h2 --> sw1 --> napt --> sw2 --> ids
+  ids -->|suspicious| insp
+  ids -->|allowed HTTP / passthrough| lb1 --> sw3 --> llm
+```
+
+**Why this shape?**  
+- **NAPT first** establishes a single **routable** presence (`100.0.0.0/24`) for the whole user site.  
+- **IDS before LB** means you scan **client-originated** HTTP before it is rewritten to a backend IP—closer to how you would deploy inspection **in front of** a virtual IP in production.  
+- **LB last** before `sw3` keeps backend selection and **reverse-path NAT** (VIP as source on replies) local to the hop that already owns the service IP semantics.
+
+---
+
+## Control plane vs data plane
+
+```mermaid
+flowchart TB
+  subgraph cp[Control plane — POX]
+    OF[OpenFlow 1.0 listener]
+    LS[LearningSwitch for DPID 1–3]
+    CW[click_wrapper: subprocess Click]
+  end
+  subgraph dp[Data plane]
+    ovs[OVS on sw1–sw3]
+    nk[Click napt]
+    ik[Click ids]
+    lk[Click lb1]
+  end
+  OF --> LS --> ovs
+  OF -->|DPID 4| CW --> nk
+  OF -->|DPID 5| CW --> ik
+  OF -->|DPID 6| CW --> lk
+```
+
+When a switch connects, the controller’s **DPID** decides behavior: **ordinary L2 learning** for the fabric switches, **spawn Click** for the three NFV “switch” nodes. That mirrors the brief: **you do not use `ovs-ofctl` to implement the NAPT/IDS/LB**; those are **Click pipelines** attached to `FromDevice` / `ToDevice` on the Linux interfaces Mininet creates (`napt-eth*`, `ids-eth*`, `lb1-eth*`).
+
+---
+
+## End-to-end HTTP path (logical)
+
+```mermaid
+sequenceDiagram
+  participant H as h1/h2
+  participant N as NAPT
+  participant I as IDS
+  participant L as LB VIP
+  participant B as llm1/2/3
+
+  H->>N: TCP to 100.0.0.45:80 from 10.0.0.x
+  Note over N: rewrite src to 100.0.0.0/24 side
+  N->>I: forwarded frame on IZ
+  alt method/payload OK
+    I->>L: toward lb1
+    Note over L: round-robin dst to backend; reverse map src VIP
+    L->>B: HTTP to real server IP
+    B-->>L: reply
+    L-->>I: src appears as VIP
+    I-->>N: return path
+    N-->>H: dst translated back to private host
+  else suspicious request
+    I->>I: redirect to insp (PCAP)
+  end
+```
+
+Ping to **`100.0.0.45`** follows a similar idea at the LB: the brief requires **ICMP responses** from the VIP path so clients can probe reachability without knowing which backend exists.
+
+---
+
+## Repository map (high level)
+
+| Path | Role |
+|------|------|
+| `topology/topology.py` | Mininet `MyTopo`, addressing, `startup_services` (HTTP on LLMs, `tcpdump` on `insp`, LB MAC alignment). |
+| `topology/topology_test.py` | Automated scenarios; output feeds **`phase_1_report`** when run via `make test`. |
+| `applications/controller/baseController.py` | POX: learning switches + Click launch by DPID. |
+| `applications/controller/click_wrapper.py` | Runs `click` with the right `.click` file per NFV node. |
+| `applications/nfv/*.click` | **NAPT**, **IDS**, **LB** implementations + counters / `DriverManager` reports. |
+| `Makefile` | `topo`, `app`, `test`, `clean`; optional **`test-lb`** for LB-focused runs. |
+| `docs/load_balancer.md` | Deeper LB-focused notes (elements, interface semantics). |
+
+---
+
 ## How to run the project
 
 **make topo:**
@@ -17,6 +149,11 @@ Example:
 **make test:**
 
 Restarts topology, and the sdn controller. Then it runs provided test scenarios.
+Automated runs set report paths so **`napt.report`**, **`ids.report`**, and **`lb1.report`** are written under the project root (see `Makefile`), and consolidate console output into **`phase_1_report`** for submission-style logs.
+
+**make test-lb:**
+
+Optional load-balancer integration test script (see `scripts/run_lb_integration_test.sh`); useful when isolating **LB** behavior.
 
 **make clean:**
 

@@ -12,7 +12,7 @@ cp applications/controller/* "${POXDIR}ext/"
 cp applications/nfv/*.click "${POXDIR}ext/"
 
 echo "[run_lb_integration_test] starting POX..."
-sudo -E bash -c "cd '$ROOT' && export IK2221_LB_REPORT='$IK2221_LB_REPORT' && python3 ${POXDIR%/}pox.py baseController" &
+sudo -E bash -c "cd '$ROOT' && export IK2221_LB_REPORT='$IK2221_LB_REPORT' && python3 '${POXDIR%/}/pox.py' baseController" &
 cleanup() {
   echo "[run_lb_integration_test] stopping POX / Click / Mininet"
   sudo pkill -f 'pox.py baseController' || true

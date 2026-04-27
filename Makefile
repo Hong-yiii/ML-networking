@@ -36,6 +36,14 @@ test:
 	$(MAKE) clean 2>/dev/null || true
 	@echo "=== Results written to phase_1_report, napt.report, ids.report, lb1.report ==="
 
+# Sync repo to IK2221 QEMU VM (see scripts/vm-sync.sh; set VM_SSH_PASS if needed).
+vm-sync:
+	bash scripts/vm-sync.sh
+
+# Run LB-only tests on the VM (SSH + sudo; VM_SSH_PASS / VM_SUDO_PASS as for vm-sync).
+vm-test-lb:
+	bash scripts/vm-run.sh
+
 # Load-balancer integration test (LB-only topology, no napt/ids).
 test-lb:
 	POXDIR="$(poxdir)" bash scripts/run_lb_integration_test.sh
