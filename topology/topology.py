@@ -102,11 +102,18 @@ def startup_services(net):
         # Create a few test pages
         for i in range(1, 4):
             host.cmd(f'echo "<html><body>Page {i} from {name}</body></html>" > /tmp/www/page{i}.html')
+        host.cmd(f'echo "<html><body>index from {name}</body></html>" > /tmp/www/index.html')
         host.cmd('cd /tmp/www && python3 -m http.server 80 &')
 
     # Start tcpdump on inspector to capture suspicious packets
     insp = net.get('insp')
     insp.cmd('tcpdump -i insp-eth0 -w /tmp/insp_capture.pcap &')
+
+    # Match lb1.click AddressInfo / ARPResponder MACs (Click does not learn these from Linux).
+    lb = net.get('lb1')
+    if lb:
+        lb.cmd('ip link set dev lb1-eth1 address 02:00:00:00:01:45 2>/dev/null || true')
+        lb.cmd('ip link set dev lb1-eth2 address 02:00:00:00:02:45 2>/dev/null || true')
 
 
 

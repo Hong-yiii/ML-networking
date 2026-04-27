@@ -17,6 +17,10 @@ app:
 test:
 	@echo "starting test scenarios!"
 
+# Load-balancer integration (starts POX, runs LB-only Mininet topology). Course VM only.
+test-lb:
+	POXDIR="$(poxdir)" bash scripts/run_lb_integration_test.sh
+
 clean:
 	@echo "project files removed from pox directory!"
 	# Remove files from ext dir in pox

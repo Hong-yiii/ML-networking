@@ -1,3 +1,7 @@
+// =============================================================================
+// MOCK / STUB — two-port L2 bridge. Real IDS needs a third port to insp and
+// HTTP inspection. Kept for LB-only topologies and staged development.
+// =============================================================================
 // 2 variables to hold ports names
 define($PORT1 ids-eth1, $PORT2 ids-eth3)
 

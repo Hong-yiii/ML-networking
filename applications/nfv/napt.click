@@ -1,3 +1,41 @@
+// =============================================================================
+// MOCK / STUB — transparent L2 bridge for LB-only and incremental testing.
+// Replace with real NAPT (IPRewriter + ICMPPingRewriter + ARP) for submission.
+// =============================================================================
+// 2 variables to hold ports names
+define($PORT1 napt-eth1, $PORT2 napt-eth2)
+//require(library ./forwarder.click)
+//Forwarder($PORT1, $PORT2, $VERBOSE)
+// Script will run as soon as the router starts
+Script(print "Click forwarder on $PORT1 $PORT2")
+
+// Group common elements in a single block. $port is a parameter used just to print
+elementclass L2Forwarder {$port|
+	input
+	->cnt::Counter
+        ->Print
+	->Queue
+	->output
+}
+
+// From where to pick packets
+fd1::FromDevice($PORT1, SNIFFER false, METHOD LINUX, PROMISC true)
+fd2::FromDevice($PORT2, SNIFFER false, METHOD LINUX, PROMISC true)
+
+// Where to send packets
+td1::ToDevice($PORT1, METHOD LINUX)
+td2::ToDevice($PORT2, METHOD LINUX)
+
+// Instantiate 2 forwarders, 1 per directions
+fd1->fwd1::L2Forwarder($PORT1)->td2
+fd2->fwd2::L2Forwarder($PORT2)->td1
+
+
+// Print something on exit
+// DriverManager will listen on router's events
+// The pause instruction will wait until the process terminates
+// Then the prints will run an Click will exit
+=======
 define($USER_IF napt-eth1, $INF_IF napt-eth2)
 define($USER_IP 10.0.0.1, $INF_IP 100.0.0.1)
 define($USER_MAC 02:aa:00:00:00:01, $INF_MAC 02:aa:00:00:00:02)
@@ -110,9 +148,3 @@ inf_sched -> to_inf
 q_user_arp -> [0]user_sched
 q_user_ip -> [1]user_sched
 user_sched -> to_user
-
-DriverManager(
-	print "NAPT starting",
-	pause,
-	print "NAPT stopped"
-)

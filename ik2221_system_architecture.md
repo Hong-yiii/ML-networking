@@ -732,6 +732,8 @@ Expose a single virtual service endpoint at `100.0.0.45:80`, respond to ARP and 
 - rewrite server-bound packets to the selected backend,
 - rewrite return packets so clients always see the virtual service IP.
 
+Implementation notes, mocked NAPT/IDS context, LB-only Mininet topology, and a step-by-step test plan live in **`docs/load_balancer.md`** (with Mermaid diagrams).
+
 ### Internal view
 
 ```mermaid
