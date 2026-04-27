@@ -9,7 +9,7 @@ This document explains the **Click load balancer** for IK2221 Phase 1, how it f
 - [ARPResponder](https://github.com/kohler/click/wiki/ARPResponder) — answer ARP queries for configured IP/MAC pairs.
 - [ARPQuerier](https://github.com/kohler/click/wiki/ARPQuerier) — encapsulate outbound IP in Ethernet using ARP (`AddressInfo` shorthand).
 - [ICMPPingResponder](https://github.com/kohler/click/wiki/ICMPPingResponder) — answer ICMP echo requests in software.
-- [MixedQueue](https://github.com/kohler/click/wiki/MixedQueue) — merge two **push** sources (FIFO + LIFO inputs) into a **pull** output (use only **before** `ToDevice` / a pull chain; not before `ARPQuerier`, which is **push** input; fan multiple IP sources into one `ARPQuerier` like `napt.click`).
+- [MixedQueue](https://github.com/kohler/click/wiki/MixedQueue) — like [Queue](https://github.com/kohler/click/wiki/Queue), it extends `SimpleQueue` / `NotifierQueue` in Click: **push** on inputs, **pull** on the main output (see *Processing* in `click-elem2man` / source `processing() → "h/lh"`). Use it to multiplex toward **`ToDevice`** (pull), not **upstream** of [`ARPQuerier`](https://github.com/kohler/click/wiki/ARPQuerier) (inputs are **push**; wiki: *Processing: push*). Fan multiple IP sources into one `ARPQuerier` like `napt.click`.
 - POX `forwarding.l2_learning.LearningSwitch` — OpenFlow learning switches (`sw1`–`sw3`).
 
 ## Role in the full project
@@ -86,10 +86,13 @@ flowchart TB
     RW0[IPRewriter forward to backends]
     AR2[ARPResponder VIP / MAC2]
     ARQ2[ARPQuerier server side]
+    TX2[MixedQueue Ethernet]
     TD2[ToDevice eth2]
   end
   RW -->|forward| ARQ2
-  ARQ2 --> TD2
+  AR2 --> TX2
+  ARQ2 --> TX2
+  TX2 --> TD2
 ```
 
 ## Click graph highlights (`lb1.click`)
@@ -100,7 +103,7 @@ flowchart TB
    - For **every input port**, Click first looks up the packet in the **mapping table**; only if there is no mapping does it apply that port’s `INPUTSPEC` (`rr` on input 0, `pass 1` on input 1).
    - **Input 0** — new client→VIP flows: `RoundRobinIPMapper` installs mappings; **forward** packets leave **output 0** toward backends; **reverse** packets leave **output 1** toward clients.
    - **Input 1** — server→client return traffic: should **hit an existing mapping** and be rewritten back to the VIP without using `pass 1` in the common case.
-4. **ICMP echo to VIP** — `ICMPPingResponder` synthesizes replies; output is **IP**, so it shares **`ARPQuerier(lb1_client)`** input 0 with TCP return traffic—**direct fan-in** (same pattern as `napt.click`), not `MixedQueue` (pull output is incompatible with **push** `ARPQuerier` input).
+4. **ICMP echo to VIP** — `ICMPPingResponder` synthesizes replies; output is **IP**, so it shares **`ARPQuerier(lb1_client)`** input 0 with TCP return traffic—**direct fan-in** (same pattern as `napt.click`), not a queue in front of `ARPQuerier`. A `MixedQueue`/`Queue` in that position would present a **pull** output to a **push** `ARPQuerier` input (see upstream *Processing* for each element; swapping `MixedQueue` for `Queue` does not change that, because both use the same `SimpleQueue` I/O model).
 5. **Ethernet fan-in before `ToDevice`** — another **`MixedQueue`** merges **ARPResponder** output and **`ARPQuerier`** output toward the same interface.
 6. **Counters / report** — `AverageCounter` + `Counter` track drops and traffic classes; `DriverManager` prints a summary when Click exits. **Stdout/stderr** paths are chosen by `click_wrapper.start_click` from `baseController.py` (`IK2221_LB_REPORT`).
 
