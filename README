@@ -126,7 +126,7 @@ Ping to **`100.0.0.45`** follows a similar idea at the LB: the brief requires **
 | `applications/controller/click_wrapper.py` | Runs `click` with the right `.click` file per NFV node. |
 | `applications/nfv/*.click` | **NAPT**, **IDS**, **LB** implementations + counters / `DriverManager` reports. |
 | `Makefile` | `topo`, `app`, `test`, `clean`; optional **`test-lb`** for LB-focused runs. |
-| `docs/load_balancer.md` | Deeper LB-focused notes (elements, interface semantics). |
+| `docs/` | Subsystem documentation index: [docs/README.md](docs/README.md) (topology, controller, NAPT, IDS, LB, build/VM). |
 
 ---
 

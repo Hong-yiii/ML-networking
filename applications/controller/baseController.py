@@ -3,7 +3,6 @@ import datetime
 import time
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
-from pox.lib.util import dpid_to_str
 from forwarding.l2_learning import LearningSwitch
 import click_wrapper
 
@@ -17,6 +16,18 @@ class controller (object):
     def __init__(self):
         core.openflow.addListeners(self)
 
+    def _install_nfv_bridge_l2_fallback(self, conn):
+        """Install catch-all NORMAL: NFV switches get Click, not LearningSwitch—OVS may otherwise
+        have no flows (secure + empty table) and drop frames before Click's FromDevice sees them."""
+        msg = of.ofp_flow_mod()
+        msg.priority = 1
+        try:
+            normal_port = of.OFPP_NORMAL
+        except AttributeError:
+            normal_port = 0xFFFA  # OpenFlow 1.0 OFPP_NORMAL (65530)
+        msg.actions.append(of.ofp_action_output(port=normal_port))
+        conn.send(msg)
+
     def _handle_ConnectionUp(self, event):
         id = event.dpid
         if id <= 3:
@@ -29,6 +40,7 @@ class controller (object):
             self.devices[id] = click_wrapper.start_click(
                 "/opt/pox/ext/napt.click", "", napt_out, napt_err
             )
+            self._install_nfv_bridge_l2_fallback(event.connection)
         elif id == 5:
             log.info("Starting IDS — waiting for ids-eth1 to appear...")
             for i in range(20):
@@ -41,6 +53,7 @@ class controller (object):
             self.devices[id] = click_wrapper.start_click(
                 "/opt/pox/ext/ids.click", "", ids_out, ids_err
             )
+            self._install_nfv_bridge_l2_fallback(event.connection)
         elif id == 6:
             log.info("Starting Load Balancer")
             lb_out = os.environ.get("IK2221_LB_REPORT", "/tmp/lb1.report")
@@ -48,6 +61,7 @@ class controller (object):
             self.devices[id] = click_wrapper.start_click(
                 "/opt/pox/ext/lb1.click", "", lb_out, lb_err
             )
+            self._install_nfv_bridge_l2_fallback(event.connection)
         else:
             log.error("Unknown device connected to the controller")
 

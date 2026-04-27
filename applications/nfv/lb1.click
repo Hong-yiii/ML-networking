@@ -85,7 +85,7 @@ c1[2] -> Strip(14)
        -> MarkIPHeader(0)
        -> CheckIPHeader(INTERFACES 100.0.0.0/24)
        -> ipc :: IPClassifier(
-              dst host $VIP and icmp type echo,
+              dst host $VIP and icmp,
               dst host $VIP and tcp dst port 80,
               -);
 

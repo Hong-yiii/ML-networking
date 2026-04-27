@@ -114,6 +114,18 @@ def startup_services(net):
     if lb:
         lb.cmd('ip link set dev lb1-eth1 address 02:00:00:00:01:45 2>/dev/null || true')
         lb.cmd('ip link set dev lb1-eth2 address 02:00:00:00:02:45 2>/dev/null || true')
+        for proto in ('OpenFlow10', 'OpenFlow13', 'OpenFlow14'):
+            lb.cmd(
+                f"ovs-ofctl -O {proto} add-flow {lb.name} 'priority=0,actions=NORMAL' 2>/dev/null || true"
+            )
+
+    for nfv_name in ('napt', 'ids'):
+        nfv = net.get(nfv_name)
+        if nfv:
+            for proto in ('OpenFlow10', 'OpenFlow13', 'OpenFlow14'):
+                nfv.cmd(
+                    f"ovs-ofctl -O {proto} add-flow {nfv.name} 'priority=0,actions=NORMAL' 2>/dev/null || true"
+                )
 
 
 
