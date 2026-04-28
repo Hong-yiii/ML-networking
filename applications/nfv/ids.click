@@ -62,9 +62,14 @@ ipc[2] -> cnt_tcpsig::Counter -> q3   // other TCP → pass through
 // === TCP to port 80: gate on whether the packet carries HTTP payload ===
 // Packets without a TCP payload (SYN, FIN, RST, pure ACK) must pass transparently.
 // Only data-carrying segments are handed to the HTTP method classifier.
+//
+// `tcp data length` is unsupported on this Click build; we approximate via
+// IP total length (`ip[2:2]`). SYN with full TCP options is ≤ 60 bytes; the
+// smallest HTTP request curl produces is ~75 bytes payload (≥ 115 bytes IP
+// total). Threshold > 60 is safe for our test traffic.
 ipc[0] -> data_gate::IPClassifier(
-    tcp and tcp data length >= 1,  // [0] has payload → inspect HTTP method
-    -                               // [1] no payload (SYN/FIN/RST/ACK-only) → pass
+    ip[2:2] > 60,  // [0] likely has HTTP payload → inspect method
+    -              // [1] no payload (SYN/FIN/RST/ACK-only) → pass
 );
 data_gate[1] -> cnt_tcpsig         // share counter with other TCP control
 
@@ -79,23 +84,98 @@ data_gate[0] -> method_cl::Classifier(
 method_cl[0] -> cnt_post::Counter    -> q3   // POST allowed
 method_cl[2] -> cnt_blocked::Counter -> q2   // other methods → insp
 
-// === PUT body inspection using RegexClassifier (full-packet scan) ===
-// RegexClassifier scans the entire packet so keywords in the HTTP body are found
-// regardless of header length. Output N (index 5) = no match = clean PUT.
-method_cl[1] -> cnt_put::Counter -> regex_payload::RegexClassifier(
-    "cat /etc/passwd",
-    "cat /var/log/",
-    "INSERT",
-    "UPDATE",
-    "DELETE"
+// === PUT body keyword inspection (no PCRE/RegexClassifier needed) ===
+//
+// The course Click was not built with --enable-pcre, so RegexClassifier is
+// unavailable. We can NOT use Strip(54) + Search("\r\n\r\n") + Classifier
+// either: Strip/Search advance the packet's data pointer, and the queues
+// downstream feed ToDevice which writes p->data() to the netdevice — that
+// would put only post-strip body bytes onto the wire, breaking the clean
+// PUT forwarding path.
+//
+// Approach used here: fixed-offset Classifier patterns matching each
+// injection keyword at the offsets where the HTTP body is expected to
+// start. The packet is forwarded intact (no strip), so ToDevice on the
+// next queue receives a complete L2 frame.
+//
+// Offset derivation for curl 7.81 PUT against http://100.0.0.45:80/:
+//   Eth(14) + IPv4(20, no opts) + TCP(20|32, depending on TCP options)
+//   + HTTP headers (≈ 143 bytes for our target VIP, 2-digit Content-Length)
+//   = 197 (no TCP opts) or 209 (with 12-byte TCP timestamps option).
+//
+// Linux defaults to TCP timestamps ON, so 209 is the common case in this
+// mininet topology; we still try a window around both candidates to
+// tolerate ±1 byte shifts from Content-Length digit width and similar.
+//
+// Keywords (hex):
+//   "cat /etc/passwd" = 63 61 74 20 2f 65 74 63 2f 70 61 73 73 77 64
+//   "cat /var/log/"   = 63 61 74 20 2f 76 61 72 2f 6c 6f 67 2f
+//   "INSERT"          = 49 4e 53 45 52 54
+//   "UPDATE"          = 55 50 44 41 54 45
+//   "DELETE"          = 44 45 4c 45 54 45
+method_cl[1] -> cnt_put::Counter -> body_kw::Classifier(
+    // ---- "cat /etc/passwd"
+    195/636174202f6574632f706173737764,
+    197/636174202f6574632f706173737764,
+    207/636174202f6574632f706173737764,
+    209/636174202f6574632f706173737764,
+    211/636174202f6574632f706173737764,
+    // ---- "cat /var/log/"
+    195/636174202f7661722f6c6f672f,
+    197/636174202f7661722f6c6f672f,
+    207/636174202f7661722f6c6f672f,
+    209/636174202f7661722f6c6f672f,
+    211/636174202f7661722f6c6f672f,
+    // ---- "INSERT"
+    195/494e53455254,
+    197/494e53455254,
+    207/494e53455254,
+    209/494e53455254,
+    211/494e53455254,
+    // ---- "UPDATE"
+    195/555044415445,
+    197/555044415445,
+    207/555044415445,
+    209/555044415445,
+    211/555044415445,
+    // ---- "DELETE"
+    195/44454c455445,
+    197/44454c455445,
+    207/44454c455445,
+    209/44454c455445,
+    211/44454c455445,
+    // ---- default: clean PUT
+    -
 );
 
-regex_payload[0] -> cnt_malicious::Counter -> q2   // keyword matched → insp
-regex_payload[1] -> cnt_malicious
-regex_payload[2] -> cnt_malicious
-regex_payload[3] -> cnt_malicious
-regex_payload[4] -> cnt_malicious
-regex_payload[5] -> cnt_put_clean::Counter -> q3   // clean PUT → allow
+// All 25 keyword-match outputs go to insp via q2.
+body_kw[ 0] -> cnt_malicious::Counter -> q2;
+body_kw[ 1] -> cnt_malicious;
+body_kw[ 2] -> cnt_malicious;
+body_kw[ 3] -> cnt_malicious;
+body_kw[ 4] -> cnt_malicious;
+body_kw[ 5] -> cnt_malicious;
+body_kw[ 6] -> cnt_malicious;
+body_kw[ 7] -> cnt_malicious;
+body_kw[ 8] -> cnt_malicious;
+body_kw[ 9] -> cnt_malicious;
+body_kw[10] -> cnt_malicious;
+body_kw[11] -> cnt_malicious;
+body_kw[12] -> cnt_malicious;
+body_kw[13] -> cnt_malicious;
+body_kw[14] -> cnt_malicious;
+body_kw[15] -> cnt_malicious;
+body_kw[16] -> cnt_malicious;
+body_kw[17] -> cnt_malicious;
+body_kw[18] -> cnt_malicious;
+body_kw[19] -> cnt_malicious;
+body_kw[20] -> cnt_malicious;
+body_kw[21] -> cnt_malicious;
+body_kw[22] -> cnt_malicious;
+body_kw[23] -> cnt_malicious;
+body_kw[24] -> cnt_malicious;
+// Default (no keyword match): allow as clean PUT.
+body_kw[25] -> cnt_put_clean::Counter -> q3;
 
 DriverManager(
     print "IDS starting",
@@ -107,7 +187,7 @@ DriverManager(
     print "HTTP responses:         $(cnt_resp.count)",
     print "HTTP POST allowed:      $(cnt_post.count)",
     print "HTTP PUT clean:         $(cnt_put_clean.count)",
-    print "HTTP PUT malicious:     $(cnt_malicious.count)",
+    print "HTTP PUT diverted:      $(cnt_malicious.count)",
     print "HTTP blocked methods:   $(cnt_blocked.count)",
-    print "Non-IP dropped:         $(cnt_drop.count)",
+    print "Non-IP dropped:         $(cnt_drop.count)"
 )

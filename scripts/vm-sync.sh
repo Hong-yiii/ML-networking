@@ -14,7 +14,9 @@ HOST="${VM_SSH_HOST:-127.0.0.1}"
 PORT="${VM_SSH_PORT:-2222}"
 USER="${VM_SSH_USER:-ik2221}"
 REMOTE_DIR="${VM_REMOTE_DIR:-/home/${USER}/ML-networking}"
-PASS="${VM_SSH_PASS:-}"
+# Local-dev default: course VM uses username == password == "ik2221".
+# Override by exporting VM_SSH_PASS before running.
+PASS="${VM_SSH_PASS:-ik2221}"
 
 rsync_cmd=(
   rsync -avz --delete

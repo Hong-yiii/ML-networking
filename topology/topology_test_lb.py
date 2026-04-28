@@ -9,6 +9,8 @@ Usage (course VM, two common patterns):
    - Terminal B: ``sudo -E env IK2221_LB_REPORT=$PWD/lb1.report python3 topology/topology_test_lb.py``
 
 2) One shot (see scripts/run_lb_integration_test.sh)
+
+Optional: ``IK2221_TOPO_VERBOSE=1`` prints OVS flow install diagnostics for ``lb1``.
 """
 
 from mininet.topo import Topo
@@ -23,6 +25,8 @@ if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
 import testing  # noqa: E402
+
+_TOPO_VERBOSE = os.environ.get("IK2221_TOPO_VERBOSE", "")
 
 
 class LbOnlyTopo(Topo):
@@ -51,6 +55,16 @@ def startup_lb_only(net):
     lb = net.get("lb1")
     lb.cmd("ip link set dev lb1-eth1 address 02:00:00:00:01:45 2>/dev/null || true")
     lb.cmd("ip link set dev lb1-eth2 address 02:00:00:00:02:45 2>/dev/null || true")
+    # NFV bridges may have no learner-installed flows; secure + empty table drops traffic.
+    for proto in ("OpenFlow10", "OpenFlow13", "OpenFlow14"):
+        out = lb.cmd(
+            f"ovs-ofctl -O {proto} add-flow {lb.name} 'priority=0,actions=NORMAL' 2>&1"
+        )
+        if _TOPO_VERBOSE and out.strip():
+            print(f"[startup_lb_only] ovs-ofctl -O {proto}: {out.strip()[:200]}")
+    if _TOPO_VERBOSE:
+        flows = lb.cmd(f"ovs-ofctl dump-flows {lb.name} 2>&1")
+        print("[startup_lb_only] dump-flows lb1:", flows.strip()[:800] if flows.strip() else "(empty)")
 
 
 def run_lb_tests(net):

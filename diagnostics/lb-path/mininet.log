@@ -1,0 +1,170 @@
+[diag] startup_services done; sleeping 8s for Click+OVS warmup
+
+=== click processes: pgrep -af click ===
+4319 sudo click /opt/pox/ext/napt.click
+4329 sudo click /opt/pox/ext/lb1.click
+4333 sudo click /opt/pox/ext/napt.click
+4334 click /opt/pox/ext/napt.click
+4336 sudo click /opt/pox/ext/lb1.click
+4337 click /opt/pox/ext/lb1.click
+
+=== click stderr sizes: ls -la /tmp/diag-lb-path/*.stderr /tmp/diag-lb-path/*.report ===
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/ids.report
+-rw-r--r-- 1 root root  67 Apr 28 16:42 /tmp/diag-lb-path/ids.stderr
+-rw-r--r-- 1 root root  48 Apr 28 16:42 /tmp/diag-lb-path/lb1.report
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/lb1.stderr
+-rw-r--r-- 1 root root 112 Apr 28 16:42 /tmp/diag-lb-path/napt.report
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/napt.stderr
+
+=== ip neigh on h1 (pre): ip netns identify $$;  ===
+
+
+=== ip neigh on h1 (pre, via h1.cmd) ===
+10.0.0.51 dev h1-eth0 lladdr 00:00:00:00:00:02 PERMANENT
+default via 10.0.0.1 dev h1-eth0 
+10.0.0.0/24 dev h1-eth0 proto kernel scope link src 10.0.0.50 
+
+
+=== ip neigh on llm1 (pre) ===
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+100.0.0.30 dev llm1-eth0 lladdr 00:00:00:00:00:03 PERMANENT
+100.0.0.42 dev llm1-eth0 lladdr 00:00:00:00:00:06 PERMANENT
+100.0.0.41 dev llm1-eth0 lladdr 00:00:00:00:00:05 PERMANENT
+default via 100.0.0.45 dev llm1-eth0 
+100.0.0.0/24 dev llm1-eth0 proto kernel scope link src 100.0.0.40 
+
+
+=== ovs-ofctl dump-flows sw1: ovs-ofctl dump-flows sw1 ===
+NXST_FLOW reply (xid=0x4):
+
+=== ovs-ofctl dump-flows sw2: ovs-ofctl dump-flows sw2 ===
+NXST_FLOW reply (xid=0x4):
+
+=== ovs-ofctl dump-flows sw3: ovs-ofctl dump-flows sw3 ===
+NXST_FLOW reply (xid=0x4):
+
+=== ovs-ofctl dump-flows napt: ovs-ofctl dump-flows napt ===
+NXST_FLOW reply (xid=0x4):
+ cookie=0x0, duration=9.369s, table=0, n_packets=41, n_bytes=3286, idle_age=4, priority=1 actions=NORMAL
+ cookie=0x0, duration=8.597s, table=0, n_packets=0, n_bytes=0, idle_age=8, priority=0 actions=NORMAL
+
+=== ovs-ofctl dump-flows ids: ovs-ofctl dump-flows ids ===
+NXST_FLOW reply (xid=0x4):
+ cookie=0x0, duration=9.413s, table=0, n_packets=39, n_bytes=3126, idle_age=4, priority=1 actions=NORMAL
+ cookie=0x0, duration=8.449s, table=0, n_packets=0, n_bytes=0, idle_age=8, priority=0 actions=NORMAL
+
+=== ovs-ofctl dump-flows lb1: ovs-ofctl dump-flows lb1 ===
+NXST_FLOW reply (xid=0x4):
+ cookie=0x0, duration=9.430s, table=0, n_packets=39, n_bytes=3126, idle_age=4, priority=1 actions=NORMAL
+ cookie=0x0, duration=8.919s, table=0, n_packets=0, n_bytes=0, idle_age=9, priority=0 actions=NORMAL
+
+=== probe 1: h1 ping -c 3 100.0.0.45 ===
+PING 100.0.0.45 (100.0.0.45) 56(84) bytes of data.
+64 bytes from 100.0.0.45: icmp_seq=1 ttl=255 time=83.0 ms
+64 bytes from 100.0.0.45: icmp_seq=2 ttl=255 time=29.0 ms
+64 bytes from 100.0.0.45: icmp_seq=3 ttl=255 time=9.86 ms
+
+--- 100.0.0.45 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2007ms
+rtt min/avg/max/mdev = 9.862/40.630/83.038/30.987 ms
+
+
+=== ip neigh on h1 (post-ping) ===
+100.0.0.45 dev h1-eth0 lladdr 02:00:00:00:01:45 STALE
+10.0.0.51 dev h1-eth0 lladdr 00:00:00:00:00:02 PERMANENT
+10.0.0.1 dev h1-eth0 lladdr 02:aa:00:00:00:01 REACHABLE
+
+
+=== probe 2: pgrep click: pgrep -af click ===
+4329 sudo click /opt/pox/ext/lb1.click
+4336 sudo click /opt/pox/ext/lb1.click
+4337 click /opt/pox/ext/lb1.click
+
+=== probe 3: h1 curl POST -> VIP (verbose) ===
+Note: Unnecessary use of -X or --request, POST is already inferred.
+*   Trying 100.0.0.45:80...
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:02 --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:03 --:--:--     0* After 4000ms connect time, move on!
+* connect to 100.0.0.45 port 80 failed: Connection timed out
+* Connection timeout after 4002 ms
+  0     0    0     0    0     0      0      0 --:--:--  0:00:04 --:--:--     0
+* Closing connection 0
+curl: (28) Connection timeout after 4002 ms
+
+
+=== probe 4: h1 curl GET -> VIP (verbose) ===
+*   Trying 100.0.0.45:80...
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:02 --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:03 --:--:--     0* After 4000ms connect time, move on!
+* connect to 100.0.0.45 port 80 failed: Connection timed out
+* Connection timeout after 4002 ms
+  0     0    0     0    0     0      0      0 --:--:--  0:00:04 --:--:--     0
+* Closing connection 0
+curl: (28) Connection timeout after 4002 ms
+
+
+=== probe 5: h1 -> 100.0.0.40 direct (skip LB) ===
+*   Trying 100.0.0.40:80...
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:02 --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:03 --:--:--     0* After 4000ms connect time, move on!
+* connect to 100.0.0.40 port 80 failed: Connection timed out
+* Connection timeout after 4003 ms
+  0     0    0     0    0     0      0      0 --:--:--  0:00:04 --:--:--     0
+* Closing connection 0
+curl: (28) Connection timeout after 4003 ms
+
+
+=== llm1 saw any TCP? (server logs) ===
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+LISTEN 0      5            0.0.0.0:80        0.0.0.0:*          
+
+
+=== ip neigh after probes ===
+100.0.0.45 dev h1-eth0 lladdr 02:00:00:00:01:45 STALE
+10.0.0.51 dev h1-eth0 lladdr 00:00:00:00:00:02 PERMANENT
+10.0.0.1 dev h1-eth0 lladdr 02:aa:00:00:00:01 REACHABLE
+
+
+=== ovs-ofctl dump-flows lb1 (post): ovs-ofctl dump-flows lb1 ===
+NXST_FLOW reply (xid=0x4):
+ cookie=0x0, duration=24.987s, table=0, n_packets=65, n_bytes=5010, idle_age=0, priority=1 actions=NORMAL
+ cookie=0x0, duration=24.476s, table=0, n_packets=0, n_bytes=0, idle_age=24, priority=0 actions=NORMAL
+
+=== ovs-ofctl dump-flows napt (post): ovs-ofctl dump-flows napt ===
+NXST_FLOW reply (xid=0x4):
+ cookie=0x0, duration=25.062s, table=0, n_packets=71, n_bytes=5506, idle_age=0, priority=1 actions=NORMAL
+ cookie=0x0, duration=24.290s, table=0, n_packets=0, n_bytes=0, idle_age=24, priority=0 actions=NORMAL
+
+=== ovs-ofctl dump-flows ids  (post): ovs-ofctl dump-flows ids ===
+NXST_FLOW reply (xid=0x4):
+ cookie=0x0, duration=25.109s, table=0, n_packets=69, n_bytes=5346, idle_age=0, priority=1 actions=NORMAL
+ cookie=0x0, duration=24.145s, table=0, n_packets=0, n_bytes=0, idle_age=24, priority=0 actions=NORMAL
+
+=== SIGINT click so DriverManager flushes counters ===
+
+=== click reports (after SIGINT): for p in $(pgrep -x click); do echo killing $p; kill -INT $p; done; sleep 2; echo '--- NAPT REPORT ---'; cat /tmp/diag-lb-path/napt.report; echo '--- LB1  REPORT ---'; cat /tmp/diag-lb-path/lb1.report ===
+--- NAPT REPORT ---
+NAPT starting (10.0.0.0/24 <-> 100.0.0.0/24)
+Click NAPT on napt-eth1 (10.0.0.0/24) <-> napt-eth2 (100.0.0.0/24)
+--- LB1  REPORT ---
+LB1 starting (VIP=100.0.0.45 -> llm1/llm2/llm3)
+
+=== click stderr sizes (post): ls -la /tmp/diag-lb-path/*.stderr /tmp/diag-lb-path/*.report /tmp/lb1.stderr /tmp/napt.stderr /tmp/ids.stderr ===
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/ids.report
+-rw-r--r-- 1 root root  67 Apr 28 16:42 /tmp/diag-lb-path/ids.stderr
+-rw-r--r-- 1 root root  48 Apr 28 16:42 /tmp/diag-lb-path/lb1.report
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/lb1.stderr
+-rw-r--r-- 1 root root 112 Apr 28 16:42 /tmp/diag-lb-path/napt.report
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/napt.stderr
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/ids.stderr
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/lb1.stderr
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/napt.stderr
+
+=== click stderr (lb1) head: head -80 /tmp/lb1.stderr || true ===
+
+=== click stderr (napt) head: head -80 /tmp/napt.stderr || true ===
+
+=== click stderr (ids) head: head -80 /tmp/ids.stderr || true ===

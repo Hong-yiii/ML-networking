@@ -16,7 +16,9 @@ HOST="${VM_SSH_HOST:-127.0.0.1}"
 PORT="${VM_SSH_PORT:-2222}"
 USER="${VM_SSH_USER:-ik2221}"
 REMOTE_DIR="${VM_REMOTE_DIR:-/home/${USER}/ML-networking}"
-PASS="${VM_SSH_PASS:-}"
+# Local-dev default: course VM uses username == password == "ik2221".
+# Override by exporting VM_SSH_PASS / VM_SUDO_PASS before running.
+PASS="${VM_SSH_PASS:-ik2221}"
 SUDO_PASS="${VM_SUDO_PASS:-}"
 if [[ -z "$SUDO_PASS" && -n "$PASS" ]]; then
   SUDO_PASS="$PASS"
@@ -32,7 +34,14 @@ wrap_sudo_bash_lc() {
 }
 
 if [[ $# -gt 0 ]]; then
-  REMOTE_CMD="$*"
+  # User-supplied command: still cd into REMOTE_DIR and wrap in sudo when we
+  # have a password, so commands like `make test` (which internally uses sudo)
+  # don't prompt and run from the synced tree.
+  INNER="cd ${REMOTE_DIR} && export \
+    IK2221_NAPT_REPORT=\"${REMOTE_DIR}/napt.report\" \
+    IK2221_IDS_REPORT=\"${REMOTE_DIR}/ids.report\" \
+    IK2221_LB_REPORT=\"${REMOTE_DIR}/lb1.report\" && $*"
+  REMOTE_CMD="$(wrap_sudo_bash_lc "$INNER")"
 else
   INNER="cd ${REMOTE_DIR} && export IK2221_LB_REPORT=\"${REMOTE_DIR}/lb1.report\" && make test-lb"
   REMOTE_CMD="$(wrap_sudo_bash_lc "$INNER")"

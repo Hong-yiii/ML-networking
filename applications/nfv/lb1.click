@@ -22,12 +22,13 @@ AddressInfo(
 );
 
 // Round-robin mapper: new client→VIP flows are distributed across the three backends.
-// Pattern format: SADDR SPORT DADDR DPORT FOUTPUT ROUTPUT
+// Pattern tokens: SADDR SPORT DADDR DPORT FOUTPUT ROUTPUT
 // "-" keeps the original field. Forward exits at 0, reverse at 1.
+// (Each spec is a comma-separated bare token list — wrapping in "..." is a syntax error.)
 rr :: RoundRobinIPMapper(
-  "- - 100.0.0.40 80 0 1",
-  "- - 100.0.0.41 80 0 1",
-  "- - 100.0.0.42 80 0 1"
+  - - 100.0.0.40 80 0 1,
+  - - 100.0.0.41 80 0 1,
+  - - 100.0.0.42 80 0 1
 );
 
 // IPRewriter input 0: new client flows (apply rr mapper).
@@ -85,7 +86,7 @@ c1[2] -> Strip(14)
        -> MarkIPHeader(0)
        -> CheckIPHeader(INTERFACES 100.0.0.0/24)
        -> ipc :: IPClassifier(
-              dst host $VIP and icmp type echo,
+              dst host $VIP and icmp,
               dst host $VIP and tcp dst port 80,
               -);
 
@@ -148,27 +149,29 @@ eth2_tx -> m2_out -> td2;
 
 ScheduleInfo(fd1 .1, td1 1, fd2 .1, td2 1);
 
+// DriverManager prints below: $(handler) is only interpolated inside a string
+// literal. The "label, $(handler)" comma form is rejected as a syntax error.
 DriverManager(
-  print "LB1 starting (VIP=100.0.0.45 → llm1/llm2/llm3)",
+  print "LB1 starting (VIP=100.0.0.45 -> llm1/llm2/llm3)",
   pause,
   print "=================== LB1 Report ===================",
-  print "eth1 in  avg pps:              ", $(m1_in/ac.rate),
-  print "eth1 in  total pkts:           ", $(m1_in/cnt.count),
-  print "eth2 in  avg pps:              ", $(m2_in/ac.rate),
-  print "eth2 in  total pkts:           ", $(m2_in/cnt.count),
-  print "eth1 out avg pps:              ", $(m1_out/ac.rate),
-  print "eth1 out total pkts:           ", $(m1_out/cnt.count),
-  print "eth2 out avg pps:              ", $(m2_out/ac.rate),
-  print "eth2 out total pkts:           ", $(m2_out/cnt.count),
-  print "ARP requests  (client side):   ", $(cnt_arp_req_c.count),
-  print "ARP replies   (client side):   ", $(cnt_arp_rep_c.count),
-  print "ARP requests  (server side):   ", $(cnt_arp_req_s.count),
-  print "ARP replies   (server side):   ", $(cnt_arp_rep_s.count),
-  print "Service TCP   (client→VIP:80): ", $(cnt_svc_tcp_c.count),
-  print "ICMP echo to VIP:              ", $(cnt_icmp_echo.count),
-  print "IP drops      (client side):   ", $(cnt_drop_c.count),
-  print "IP drops      (server side):   ", $(cnt_drop_s.count),
-  print "L2 drops      (client side):   ", $(cnt_other_l2_c.count),
-  print "L2 drops      (server side):   ", $(cnt_other_l2_s.count),
-  print "IPRewriter mapping failures:   ", $(tcp_rw.mapping_failures),
+  print "eth1 in  avg pps:              $(m1_in/ac.rate)",
+  print "eth1 in  total pkts:           $(m1_in/cnt.count)",
+  print "eth2 in  avg pps:              $(m2_in/ac.rate)",
+  print "eth2 in  total pkts:           $(m2_in/cnt.count)",
+  print "eth1 out avg pps:              $(m1_out/ac.rate)",
+  print "eth1 out total pkts:           $(m1_out/cnt.count)",
+  print "eth2 out avg pps:              $(m2_out/ac.rate)",
+  print "eth2 out total pkts:           $(m2_out/cnt.count)",
+  print "ARP requests  (client side):   $(cnt_arp_req_c.count)",
+  print "ARP replies   (client side):   $(cnt_arp_rep_c.count)",
+  print "ARP requests  (server side):   $(cnt_arp_req_s.count)",
+  print "ARP replies   (server side):   $(cnt_arp_rep_s.count)",
+  print "Service TCP   (client->VIP:80):$(cnt_svc_tcp_c.count)",
+  print "ICMP echo to VIP:              $(cnt_icmp_echo.count)",
+  print "IP drops      (client side):   $(cnt_drop_c.count)",
+  print "IP drops      (server side):   $(cnt_drop_s.count)",
+  print "L2 drops      (client side):   $(cnt_other_l2_c.count)",
+  print "L2 drops      (server side):   $(cnt_other_l2_s.count)",
+  print "IPRewriter mapping failures:   $(tcp_rw.mapping_failures)"
 );

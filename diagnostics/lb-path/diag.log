@@ -1,0 +1,16 @@
+[diag] root=/home/ik2221/ML-networking  out=/tmp/diag-lb-path
+[diag] cleaning leftover state
+[diag] copying controller + click sources to /opt/pox/ext/
+[diag] starting POX -> /tmp/diag-lb-path/pox.stdout
+[diag] POX pid=4053
+[diag] driving Mininet with MyTopo (autoSetMacs=True autoStaticArp=True)
+[diag] killing POX
+scripts/_vm_diag_lb_path.sh: line 174:  4053 Killed                  python /opt/pox/pox.py baseController > "$OUT/pox.stdout" 2>&1
+[diag] final dump of click reports (post-shutdown):
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/ids.report
+-rw-r--r-- 1 root root  67 Apr 28 16:42 /tmp/diag-lb-path/ids.stderr
+-rw-r--r-- 1 root root  48 Apr 28 16:42 /tmp/diag-lb-path/lb1.report
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/lb1.stderr
+-rw-r--r-- 1 root root 112 Apr 28 16:42 /tmp/diag-lb-path/napt.report
+-rw-r--r-- 1 root root   0 Apr 28 16:42 /tmp/diag-lb-path/napt.stderr
+[diag] done. Outputs in /tmp/diag-lb-path

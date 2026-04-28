@@ -70,11 +70,14 @@ if __name__ == "__main__":
     topo = MyTopo()
     ctrl = RemoteController("c0", ip="127.0.0.1", port=6633)
 
+    # autoStaticArp=False — see topology.py for the reasoning. Real ARP via
+    # NAPT/LB ARPResponders is needed; pre-poisoning h1 with `100.0.0.45 ->
+    # lb1-eth1's MAC` short-circuits the NFV chain and breaks TCP.
     net = Mininet(topo=topo,
                   switch=OVSSwitch,
                   controller=ctrl,
                   autoSetMacs=True,
-                  autoStaticArp=True,
+                  autoStaticArp=False,
                   build=True,
                   cleanup=True)
 

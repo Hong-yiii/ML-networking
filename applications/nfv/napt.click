@@ -58,6 +58,10 @@ tcp_rw::IPRewriter(
 )
 
 // ICMPPingRewriter: same patterns (port field maps to ICMP identifier field).
+// Required so that: client's `10.0.0.50 -> 100.0.0.45` echo request becomes
+// `100.0.0.1 -> 100.0.0.45` on the inferencing side, lb1's ICMPPingResponder
+// answers `100.0.0.45 -> 100.0.0.1` (to NAPT, which we DO answer ARP for),
+// and the reply is reverse-rewritten back to `100.0.0.45 -> 10.0.0.50` for h1.
 icmp_rw::ICMPPingRewriter(
     pattern user_to_inf 0 1,
     pattern inf_to_user 1 0
@@ -102,7 +106,7 @@ cl_user_l2[1]
 
 cl_user_ip[0] -> cnt_user_tcp  -> [0]tcp_rw    // TCP outbound: source-NAPT
 cl_user_ip[1] -> cnt_user_icmp -> [0]icmp_rw   // ICMP echo request: rewrite outbound
-cl_user_ip[2] ->                  [0]icmp_rw   // ICMP echo reply (return): rewrite
+cl_user_ip[2] ->                  [0]icmp_rw   // ICMP echo reply (from user, unusual)
 cl_user_ip[3] -> cnt_drop -> drop_other
 cl_user_l2[2] -> cnt_drop -> drop_other
 
@@ -120,8 +124,8 @@ cl_inf_l2[1]
     -> cl_inf_ip
 
 cl_inf_ip[0] -> cnt_inf_tcp  -> [1]tcp_rw    // TCP inbound: reverse mapping
-cl_inf_ip[1] -> cnt_inf_icmp -> [1]icmp_rw   // ICMP echo from inf side
-cl_inf_ip[2] ->                 [1]icmp_rw   // ICMP echo reply from inf side
+cl_inf_ip[1] ->                 [1]icmp_rw   // ICMP echo request from inf (unusual)
+cl_inf_ip[2] -> cnt_inf_icmp -> [1]icmp_rw   // ICMP echo reply from lb1 (the common case)
 cl_inf_ip[3] -> cnt_drop -> drop_other
 cl_inf_l2[2] -> cnt_drop -> drop_other
 
@@ -146,23 +150,24 @@ q_user_arp -> [0]user_sched
 q_user_ip  -> [1]user_sched
 user_sched -> ac_user_out -> to_user
 
+// $(handler) is only interpolated inside a string literal; "label, $(h)" is a syntax error.
 DriverManager(
     print "NAPT starting (10.0.0.0/24 <-> 100.0.0.0/24)",
     pause,
     print "=== NAPT Report ===",
-    print "User-side in  avg pps:    ", $(ac_user_in.rate),
-    print "User-side in  total pkts: ", $(ac_user_in.count),
-    print "Inf-side  in  avg pps:    ", $(ac_inf_in.rate),
-    print "Inf-side  in  total pkts: ", $(ac_inf_in.count),
-    print "User-side out avg pps:    ", $(ac_user_out.rate),
-    print "User-side out total pkts: ", $(ac_user_out.count),
-    print "Inf-side  out avg pps:    ", $(ac_inf_out.rate),
-    print "Inf-side  out total pkts: ", $(ac_inf_out.count),
-    print "ARP (user side):          ", $(cnt_user_arp.count),
-    print "ARP (inf side):           ", $(cnt_inf_arp.count),
-    print "TCP translated (user→inf):", $(cnt_user_tcp.count),
-    print "TCP translated (inf→user):", $(cnt_inf_tcp.count),
-    print "ICMP translated (user→inf):", $(cnt_user_icmp.count),
-    print "ICMP translated (inf→user):", $(cnt_inf_icmp.count),
-    print "Dropped (non-ARP/TCP/ICMP):", $(cnt_drop.count),
+    print "User-side in  avg pps:     $(ac_user_in.rate)",
+    print "User-side in  total pkts:  $(ac_user_in.count)",
+    print "Inf-side  in  avg pps:     $(ac_inf_in.rate)",
+    print "Inf-side  in  total pkts:  $(ac_inf_in.count)",
+    print "User-side out avg pps:     $(ac_user_out.rate)",
+    print "User-side out total pkts:  $(ac_user_out.count)",
+    print "Inf-side  out avg pps:     $(ac_inf_out.rate)",
+    print "Inf-side  out total pkts:  $(ac_inf_out.count)",
+    print "ARP (user side):           $(cnt_user_arp.count)",
+    print "ARP (inf side):            $(cnt_inf_arp.count)",
+    print "TCP translated (user->inf):$(cnt_user_tcp.count)",
+    print "TCP translated (inf->user):$(cnt_inf_tcp.count)",
+    print "ICMP translated (user->inf):$(cnt_user_icmp.count)",
+    print "ICMP translated (inf->user):$(cnt_inf_icmp.count)",
+    print "Dropped (non-ARP/TCP/ICMP):$(cnt_drop.count)"
 )

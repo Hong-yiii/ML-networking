@@ -1,0 +1,76 @@
+
+=== ip link list (root ns) ===
+$ ip -br link | grep -E 'lb1|napt|ids' || true
+lb1-eth1@ids-eth3 UP             02:00:00:00:01:45 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+ids-eth3@lb1-eth1 UP             8a:93:e3:b0:7a:b0 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+ids-eth2@if2     UP             0a:42:5e:9f:d2:b0 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+sw3-eth1@lb1-eth2 UP             ae:94:6b:29:ac:17 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+lb1-eth2@sw3-eth1 UP             02:00:00:00:02:45 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+sw2-eth1@napt-eth2 UP             9e:09:b3:42:d9:25 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+napt-eth2@sw2-eth1 UP             ba:9c:4d:9f:94:53 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+napt-eth1@sw1-eth3 UP             6a:98:fe:2a:9a:84 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+sw1-eth3@napt-eth1 UP             ca:6e:69:a2:9c:0a <BROADCAST,MULTICAST,UP,LOWER_UP> 
+ids-eth1@sw2-eth2 UP             42:9f:24:6e:28:0e <BROADCAST,MULTICAST,UP,LOWER_UP> 
+sw2-eth2@ids-eth1 UP             12:09:f5:56:8c:b7 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+napt             DOWN           72:a6:13:df:d8:43 <BROADCAST,MULTICAST> 
+lb1              DOWN           7a:51:dd:35:b4:46 <BROADCAST,MULTICAST> 
+ids              DOWN           ee:59:bb:37:b6:4b <BROADCAST,MULTICAST> 
+
+=== launch click manually for lb1 (mirrors click_wrapper) ===
+=== run as root, no sudo, capture stderr in foreground first ===
+$ timeout 2 click /opt/pox/ext/lb1.click 2>/tmp/diag-click-launch/lb1.fg.stderr; echo rc=$?
+rc=132
+  stderr> bash: line 1:  4290 Illegal instruction     timeout 2 click /opt/pox/ext/lb1.click 2> /tmp/diag-click-launch/lb1.fg.stderr
+--- /tmp/diag-click-launch/lb1.fg.stderr ---
+$ head -80 /tmp/diag-click-launch/lb1.fg.stderr
+timeout: the monitored command dumped core
+
+=== same for napt.click ===
+$ timeout 2 click /opt/pox/ext/napt.click 2>/tmp/diag-click-launch/napt.fg.stderr; echo rc=$?
+rc=132
+  stderr> bash: line 1:  4301 Illegal instruction     timeout 2 click /opt/pox/ext/napt.click 2> /tmp/diag-click-launch/napt.fg.stderr
+$ head -80 /tmp/diag-click-launch/napt.fg.stderr
+timeout: the monitored command dumped core
+
+=== same for ids.click ===
+$ timeout 2 click /opt/pox/ext/ids.click 2>/tmp/diag-click-launch/ids.fg.stderr; echo rc=$?
+rc=132
+  stderr> bash: line 1:  4312 Illegal instruction     timeout 2 click /opt/pox/ext/ids.click 2> /tmp/diag-click-launch/ids.fg.stderr
+$ head -80 /tmp/diag-click-launch/ids.fg.stderr
+timeout: the monitored command dumped core
+
+=== exact replication of click_wrapper command ===
+$ sudo click /opt/pox/ext/lb1.click   >/tmp/diag-click-launch/lb1.bg.out 2>>/tmp/diag-click-launch/lb1.bg.err &
+$ sleep 2; pgrep -af click; echo '---'; ls -la /tmp/diag-click-launch/lb1.bg.*
+3943 bash -lc echo ik2221 | sudo -SE -p '' bash -lc cd\ /home/ik2221/ML-networking\ \&\&\ export\ \ \ \ \ IK2221_NAPT_REPORT=\"/home/ik2221/ML-networking/napt.report\"\ \ \ \ \ IK2221_IDS_REPORT=\"/home/ik2221/ML-networking/ids.report\"\ \ \ \ \ IK2221_LB_REPORT=\"/home/ik2221/ML-networking/lb1.report\"\ \&\&\ bash\ scripts/_vm_diag_click_launch.sh
+3948 sudo -SE -p  bash -lc cd /home/ik2221/ML-networking && export     IK2221_NAPT_REPORT="/home/ik2221/ML-networking/napt.report"     IK2221_IDS_REPORT="/home/ik2221/ML-networking/ids.report"     IK2221_LB_REPORT="/home/ik2221/ML-networking/lb1.report" && bash scripts/_vm_diag_click_launch.sh
+3949 sudo -SE -p  bash -lc cd /home/ik2221/ML-networking && export     IK2221_NAPT_REPORT="/home/ik2221/ML-networking/napt.report"     IK2221_IDS_REPORT="/home/ik2221/ML-networking/ids.report"     IK2221_LB_REPORT="/home/ik2221/ML-networking/lb1.report" && bash scripts/_vm_diag_click_launch.sh
+3950 bash scripts/_vm_diag_click_launch.sh
+3956 bash scripts/_vm_diag_click_launch.sh
+3957 tee /tmp/diag-click-launch/diag.log
+4324 bash -lc sleep 2; pgrep -af click; echo '---'; ls -la /tmp/diag-click-launch/lb1.bg.*
+---
+-rw-r--r-- 1 root root 0 Apr 28 16:20 /tmp/diag-click-launch/lb1.bg.err
+-rw-r--r-- 1 root root 0 Apr 28 16:20 /tmp/diag-click-launch/lb1.bg.out
+
+=== if click is alive, do a ping and see counters ===
+h1 ping VIP:
+PING 100.0.0.45 (100.0.0.45) 56(84) bytes of data.
+
+--- 100.0.0.45 ping statistics ---
+2 packets transmitted, 0 received, 100% packet loss, time 1030ms
+
+
+$ pgrep -af click
+3943 bash -lc echo ik2221 | sudo -SE -p '' bash -lc cd\ /home/ik2221/ML-networking\ \&\&\ export\ \ \ \ \ IK2221_NAPT_REPORT=\"/home/ik2221/ML-networking/napt.report\"\ \ \ \ \ IK2221_IDS_REPORT=\"/home/ik2221/ML-networking/ids.report\"\ \ \ \ \ IK2221_LB_REPORT=\"/home/ik2221/ML-networking/lb1.report\"\ \&\&\ bash\ scripts/_vm_diag_click_launch.sh
+3948 sudo -SE -p  bash -lc cd /home/ik2221/ML-networking && export     IK2221_NAPT_REPORT="/home/ik2221/ML-networking/napt.report"     IK2221_IDS_REPORT="/home/ik2221/ML-networking/ids.report"     IK2221_LB_REPORT="/home/ik2221/ML-networking/lb1.report" && bash scripts/_vm_diag_click_launch.sh
+3949 sudo -SE -p  bash -lc cd /home/ik2221/ML-networking && export     IK2221_NAPT_REPORT="/home/ik2221/ML-networking/napt.report"     IK2221_IDS_REPORT="/home/ik2221/ML-networking/ids.report"     IK2221_LB_REPORT="/home/ik2221/ML-networking/lb1.report" && bash scripts/_vm_diag_click_launch.sh
+3950 bash scripts/_vm_diag_click_launch.sh
+3956 bash scripts/_vm_diag_click_launch.sh
+3957 tee /tmp/diag-click-launch/diag.log
+$ killall -9 click 2>/dev/null || true
+$ sleep 1; ls -la /tmp/diag-click-launch/lb1.bg.*; echo '--- bg out ---'; head -80 /tmp/diag-click-launch/lb1.bg.out; echo '--- bg err ---'; head -80 /tmp/diag-click-launch/lb1.bg.err
+-rw-r--r-- 1 root root 0 Apr 28 16:20 /tmp/diag-click-launch/lb1.bg.err
+-rw-r--r-- 1 root root 0 Apr 28 16:20 /tmp/diag-click-launch/lb1.bg.out
+--- bg out ---
+--- bg err ---

@@ -126,7 +126,7 @@ Ping to **`100.0.0.45`** follows a similar idea at the LB: the brief requires **
 | `applications/controller/click_wrapper.py` | Runs `click` with the right `.click` file per NFV node. |
 | `applications/nfv/*.click` | **NAPT**, **IDS**, **LB** implementations + counters / `DriverManager` reports. |
 | `Makefile` | `topo`, `app`, `test`, `clean`; optional **`test-lb`** for LB-focused runs. |
-| `docs/load_balancer.md` | Deeper LB-focused notes (elements, interface semantics). |
+| `docs/` | Subsystem documentation index: [docs/README.md](docs/README.md) (topology, controller, NAPT, IDS, LB, build/VM). |
 
 ---
 
@@ -158,4 +158,14 @@ Optional load-balancer integration test script (see `scripts/run_lb_integration_
 **make clean:**
 
 Removes all junks added to different directories to run the application.
+
+---
+
+## Where things stand & what to do next
+
+A single-page debrief of every issue we hit while bringing this up, the
+real bugs we fixed in the Click configs / topology, and the one host-side
+limitation that prevents Apple Silicon from getting 14/14 (run on Linux+KVM
+or Intel+HVF for a full pass) is in [docs/debug-history.md](docs/debug-history.md).
+Read that before re-running `make test` after any change.
 

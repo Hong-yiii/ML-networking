@@ -1,6 +1,8 @@
 # Load balancer (`lb1`) — design, mocks, and testing
 
-This document explains the **Click load balancer** for IK2221 Phase 1, how it fits next to **mocked** NAPT/IDS stubs, and how to run **LB-only** tests on the course VM. It is meant to teach the data path and the Click elements involved.
+**Doc index:** see [docs/README.md](README.md) for subsystem overview and links to NAPT/IDS/topology docs.
+
+This document explains the **Click load balancer** for IK2221 Phase 1, how it sits **between IDS and `sw3`**, and how to run **LB-only** tests (no NAPT/IDS on path) on the course VM. It focuses on **VIP semantics**, **Click elements**, and **interface/MAC alignment**. The full topology uses real NAPT and IDS **`.click`** modules in `applications/nfv/`; the LB-only test harness uses a reduced topology so you can debug **`lb1.click`** in isolation.
 
 ## References (upstream)
 
@@ -20,9 +22,9 @@ flowchart LR
     h1[h1 / h2]
     sw1[sw1 L2]
   end
-  subgraph MOCK[Mocked NFV stubs]
-    napt[napt.click stub]
-    ids[ids.click stub]
+  subgraph NFV[NFV chain]
+    napt[napt.click]
+    ids[ids.click]
   end
   subgraph LB[Load balancer]
     lb1[lb1.click VIP 100.0.0.45]
@@ -34,8 +36,8 @@ flowchart LR
   h1 --> sw1 --> napt --> ids --> lb1 --> sw3 --> llm
 ```
 
-- **Mocks (`napt.click`, `ids.click`)** — today they are **transparent L2 bridges** so you can focus on **`lb1.click`** and on Mininet addressing without implementing NAPT/IDS yet.
-- **Real submission** — replace mocks with full Click NFVs; keep **interface names** (`napt-eth*`, `ids-eth*`, `lb1-eth*`) aligned with Mininet port order.
+- **Full topology** — NAPT and IDS are Click modules on their own switches; **`lb1.click`** terminates the **virtual service IP** and round-robins HTTP to backends.
+- **LB-only runs** — `topology_test_lb.py` / `make test-lb` drop NAPT/IDS so you can validate **VIP + IPRewriter + ARP/ICMP** without the rest of the chain. Keep **interface names** (`lb1-eth*`) aligned with Mininet port order.
 
 ## LB placement and Linux interfaces
 
