@@ -17,8 +17,26 @@ class controller (object):
         core.openflow.addListeners(self)
 
     def _install_nfv_bridge_l2_fallback(self, conn):
-        """Install catch-all NORMAL: NFV switches get Click, not LearningSwitch—OVS may otherwise
-        have no flows (secure + empty table) and drop frames before Click's FromDevice sees them."""
+        """Historical fallback that put `actions=NORMAL` on NFV switches.
+
+        Removed by default: when this flow runs alongside Click on the same
+        bridge, OVS L2-bridges every frame in parallel with Click's PF_PACKET
+        pipeline. Receivers see two copies (one untranslated from OVS NORMAL,
+        one rewritten from Click), which makes TCP look like a blackhole and
+        causes ICMP to "succeed" via OVS alone — masking that NAPT/IDS/LB are
+        not actually doing their job.
+
+        Click's `FromDevice(METHOD LINUX, PROMISC true)` sees ingress frames
+        via PF_PACKET regardless of whether OVS has any flows (PF_PACKET RX
+        runs before the OVS rx_handler in __netif_receive_skb_core), so an
+        empty flow table does NOT prevent Click from receiving traffic.
+
+        Set IK2221_NFV_OVS_NORMAL=1 to re-enable the fallback during
+        debugging; otherwise leave the bridge empty so Click owns the
+        data plane on dpids 4/5/6.
+        """
+        if os.environ.get("IK2221_NFV_OVS_NORMAL") != "1":
+            return
         msg = of.ofp_flow_mod()
         msg.priority = 1
         try:

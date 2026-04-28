@@ -1,0 +1,8 @@
+[diag] cleaning leftover state
+[diag] copying click sources to /opt/pox/ext/
+[diag] starting POX in background WITHOUT click_wrapper (we'll launch click manually)
+[diag] POX pid=3999
+[diag] building Mininet
+[diag] stopping POX
+scripts/_vm_diag_click_launch.sh: line 119:  3999 Killed                  python /opt/pox/pox.py pass_through > "$OUT/pox.stdout" 2>&1
+[diag] done. Outputs in /tmp/diag-click-launch

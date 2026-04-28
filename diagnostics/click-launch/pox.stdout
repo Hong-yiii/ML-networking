@@ -1,0 +1,22 @@
+WARNING:version:POX requires one of the following versions of Python: 3.6 3.7 3.8 3.9
+WARNING:version:You're running Python 3.10.
+WARNING:version:If you run into problems, try using a supported version.
+INFO:core:POX 0.7.0 (gar) is up.
+INFO:openflow.of_01:[00-00-00-00-00-03 2] connected
+INFO:pass_through:LearningSwitch dpid 3
+INFO:openflow.of_01:[00-00-00-00-00-02 3] connected
+INFO:pass_through:LearningSwitch dpid 2
+INFO:openflow.of_01:[00-00-00-00-00-04 5] connected
+INFO:pass_through:NORMAL fallback dpid 4
+INFO:openflow.of_01:[00-00-00-00-00-06 6] connected
+INFO:pass_through:NORMAL fallback dpid 6
+INFO:openflow.of_01:[00-00-00-00-00-05 7] connected
+INFO:pass_through:NORMAL fallback dpid 5
+INFO:openflow.of_01:[00-00-00-00-00-01 4] connected
+INFO:pass_through:LearningSwitch dpid 1
+INFO:openflow.of_01:[00-00-00-00-00-03 2] closed
+INFO:openflow.of_01:[00-00-00-00-00-02 3] closed
+INFO:openflow.of_01:[00-00-00-00-00-01 4] closed
+INFO:openflow.of_01:[00-00-00-00-00-04 5] closed
+INFO:openflow.of_01:[00-00-00-00-00-06 6] closed
+INFO:openflow.of_01:[00-00-00-00-00-05 7] closed

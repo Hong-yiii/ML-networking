@@ -1,0 +1,2 @@
+NAPT starting (10.0.0.0/24 <-> 100.0.0.0/24)
+Click NAPT on napt-eth1 (10.0.0.0/24) <-> napt-eth2 (100.0.0.0/24)

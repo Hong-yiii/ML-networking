@@ -110,21 +110,23 @@ def startup_services(net):
     insp.cmd('rm -f /tmp/insp_capture.pcap && tcpdump -i insp-eth0 -w /tmp/insp_capture.pcap &')
 
     # Match lb1.click AddressInfo / ARPResponder MACs (Click does not learn these from Linux).
+    # We intentionally do NOT install actions=NORMAL on napt/ids/lb1: Click is the sole data
+    # plane on those bridges. An OVS NORMAL flow would L2-bridge every frame in parallel with
+    # Click's PF_PACKET pipeline, producing duplicate (untranslated) packets and masking
+    # NAPT/IDS/LB function. Set IK2221_NFV_OVS_NORMAL=1 to re-enable the fallback.
     lb = net.get('lb1')
     if lb:
         lb.cmd('ip link set dev lb1-eth1 address 02:00:00:00:01:45 2>/dev/null || true')
         lb.cmd('ip link set dev lb1-eth2 address 02:00:00:00:02:45 2>/dev/null || true')
-        for proto in ('OpenFlow10', 'OpenFlow13', 'OpenFlow14'):
-            lb.cmd(
-                f"ovs-ofctl -O {proto} add-flow {lb.name} 'priority=0,actions=NORMAL' 2>/dev/null || true"
-            )
 
-    for nfv_name in ('napt', 'ids'):
-        nfv = net.get(nfv_name)
-        if nfv:
+    if os.environ.get('IK2221_NFV_OVS_NORMAL') == '1':
+        for sw_name in ('napt', 'ids', 'lb1'):
+            sw = net.get(sw_name)
+            if not sw:
+                continue
             for proto in ('OpenFlow10', 'OpenFlow13', 'OpenFlow14'):
-                nfv.cmd(
-                    f"ovs-ofctl -O {proto} add-flow {nfv.name} 'priority=0,actions=NORMAL' 2>/dev/null || true"
+                sw.cmd(
+                    f"ovs-ofctl -O {proto} add-flow {sw.name} 'priority=0,actions=NORMAL' 2>/dev/null || true"
                 )
 
 
@@ -139,11 +141,18 @@ if __name__ == "__main__":
     ctrl = RemoteController("c0", ip="127.0.0.1", port=6633)
 
     # Create the network
+    # autoStaticArp=True pre-populates `arp -s peer-ip peer-mac` between every
+    # host pair. With our topology that places `100.0.0.45 -> lb1-eth1's MAC`
+    # on h1, even though h1 is in 10.0.0.0/24 and the VIP is supposed to be
+    # reached via NAPT's gateway 10.0.0.1. The poisoned ARP makes h1 send TCP
+    # to VIP with dst_mac=lb1-eth1, OVS NORMAL floods that frame all the way
+    # to llm*, and the llm kernel drops it (dst-MAC mismatch). Real ARP via
+    # NAPT/LB ARPResponders works correctly.
     net = Mininet(topo=topo,
                   switch=OVSSwitch,
                   controller=ctrl,
                   autoSetMacs=True,
-                  autoStaticArp=True,
+                  autoStaticArp=False,
                   build=True,
                   cleanup=True)
 

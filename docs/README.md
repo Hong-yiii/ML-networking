@@ -6,10 +6,12 @@ Subsystem reviews for this repository. Each page summarizes **design intent**, *
 
 | Document | Scope |
 |----------|--------|
+| **[debug-history.md](debug-history.md)** | **Start here.** Chronological "what we tried, what was a real bug, what's a host-side limitation, what to run next" debrief. |
 | [topology-and-testing.md](topology-and-testing.md) | Mininet `MyTopo`, addressing, `startup_services`, automated tests, LB-only topology |
 | [controller-and-click-wrapper.md](controller-and-click-wrapper.md) | POX `baseController`, DPID routing, `click_wrapper` process model |
 | [nfv-napt.md](nfv-napt.md) | Click NAPT: zones, ARP, TCP/ICMP rewrite, counters |
 | [nfv-ids.md](nfv-ids.md) | Click IDS: three ports, HTTP policy, diversion to `insp` |
+| [ids-non-regex-payload-checks.md](ids-non-regex-payload-checks.md) | Alternative `Search`+`Classifier` IDS design (kept for reference; not used in the active config) |
 | [nfv-load-balancer.md](load_balancer.md) | Click LB: VIP, round-robin, proxy-ARP, ICMP (deep element-level notes) |
 | [build-test-and-vm.md](build-test-and-vm.md) | `Makefile` targets, `phase_1_report`, VM sync/run scripts |
 
