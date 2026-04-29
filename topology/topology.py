@@ -137,6 +137,12 @@ def startup_services(net):
         ids_err = os.environ.get('IK2221_IDS_STDERR', '/tmp/ids.stderr')
         ids.cmd(f'nohup sudo click /opt/pox/ext/ids.click >"{ids_out}" 2>>"{ids_err}" < /dev/null &')
 
+    lb = net.get('lb1')
+    if lb and skip_controller_nfv:
+        lb_out = os.environ.get('IK2221_LB_REPORT', '/tmp/lb1.report')
+        lb_err = os.environ.get('IK2221_LB_STDERR', '/tmp/lb1.stderr')
+        lb.cmd(f'nohup sudo click /opt/pox/ext/lb1.click >"{lb_out}" 2>>"{lb_err}" < /dev/null &')
+
 
 
 # topos = {'mytopo': (lambda: MyTopo())}

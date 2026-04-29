@@ -26,7 +26,12 @@ class controller (object):
             if os.environ.get('IK2221_SKIP_CONTROLLER_NFV') == '1':
                 log.info('Skipping controller start for NAPT; topology startup launches it directly')
                 return
-            log.info("Starting NAPT")
+            log.info("Starting NAPT - waiting for napt-eth1 to appear...")
+            for i in range(20):
+                if os.path.exists('/sys/class/net/napt-eth1'):
+                    break
+                time.sleep(1)
+            log.info("NAPT interface ready, starting Click")
             napt_out = os.environ.get("IK2221_NAPT_REPORT", "/tmp/napt.report")
             napt_err = os.environ.get("IK2221_NAPT_STDERR", "/tmp/napt.stderr")
             self.devices[id] = click_wrapper.start_click(
@@ -48,7 +53,12 @@ class controller (object):
                 "/opt/pox/ext/ids.click", "", ids_out, ids_err
             )
         elif id == 6:
-            log.info("Starting Load Balancer")
+            log.info("Starting Load Balancer - waiting for lb1-eth1 to appear...")
+            for i in range(20):
+                if os.path.exists('/sys/class/net/lb1-eth1'):
+                    break
+                time.sleep(1)
+            log.info("LB interface ready, starting Click")
             lb_out = os.environ.get("IK2221_LB_REPORT", "/tmp/lb1.report")
             lb_err = os.environ.get("IK2221_LB_STDERR", "/tmp/lb1.stderr")
             self.devices[id] = click_wrapper.start_click(
