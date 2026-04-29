@@ -23,6 +23,9 @@ class controller (object):
             log.info(f"Starting Learning Switch for switch {id}")
             self.devices[id] = LearningSwitch(event.connection, False)
         elif id == 4:
+            if os.environ.get('IK2221_SKIP_CONTROLLER_NFV') == '1':
+                log.info('Skipping controller start for NAPT; topology startup launches it directly')
+                return
             log.info("Starting NAPT")
             napt_out = os.environ.get("IK2221_NAPT_REPORT", "/tmp/napt.report")
             napt_err = os.environ.get("IK2221_NAPT_STDERR", "/tmp/napt.stderr")
@@ -30,6 +33,9 @@ class controller (object):
                 "/opt/pox/ext/napt.click", "", napt_out, napt_err
             )
         elif id == 5:
+            if os.environ.get('IK2221_SKIP_CONTROLLER_NFV') == '1':
+                log.info('Skipping controller start for IDS; topology startup launches it directly')
+                return
             log.info("Starting IDS — waiting for ids-eth1 to appear...")
             for i in range(20):
                 if os.path.exists('/sys/class/net/ids-eth1'):

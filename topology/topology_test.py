@@ -1,4 +1,5 @@
 import os
+import time
 from mininet.topo import Topo
 from mininet.net import Mininet
 from mininet.node import Switch
@@ -11,6 +12,16 @@ import testing
 topos = {'mytopo': (lambda: MyTopo())}
 
 VIP = '100.0.0.45'
+
+
+def wait_for_vip(net, timeout=30):
+    h1 = net.get('h1')
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if testing.ping(h1, VIP, True):
+            return True
+        time.sleep(1)
+    return False
 
 
 def run_tests(net):
@@ -67,6 +78,8 @@ def run_tests(net):
 
 if __name__ == "__main__":
 
+    os.environ.setdefault('IK2221_SKIP_CONTROLLER_NFV', '1')
+
     topo = MyTopo()
     ctrl = RemoteController("c0", ip="127.0.0.1", port=6633)
 
@@ -80,6 +93,9 @@ if __name__ == "__main__":
 
     net.start()
     startup_services(net)
+
+    if not wait_for_vip(net):
+        print("[WARN] VIP did not become reachable before tests started")
 
     run_tests(net)
 

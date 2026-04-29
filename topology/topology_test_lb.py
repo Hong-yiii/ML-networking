@@ -43,33 +43,62 @@ class LbOnlyTopo(Topo):
 
 
 def startup_lb_only(net):
-    for name in ["llm1", "llm2", "llm3"]:
-        host = net.get(name)
+    def start_backend_server(host, name):
         host.cmd("mkdir -p /tmp/www")
         host.cmd(f'echo "<html><body>index from {name}</body></html>" > /tmp/www/index.html')
-        host.cmd("cd /tmp/www && python3 -m http.server 80 &")
+        host.cmd(f"cat > /tmp/www/server.py <<'PY'\nfrom http.server import BaseHTTPRequestHandler, HTTPServer\n\nBODY = b\"<html><body>index from {name}</body></html>\"\n\nclass Handler(BaseHTTPRequestHandler):\n    def _send_body(self):\n        self.send_response(200)\n        self.send_header('Content-Type', 'text/html')\n        self.send_header('Content-Length', str(len(BODY)))\n        self.end_headers()\n        self.wfile.write(BODY)\n\n    def do_GET(self):\n        self._send_body()\n\n    def do_POST(self):\n        self._send_body()\n\n    def log_message(self, format, *args):\n        pass\n\nHTTPServer(('0.0.0.0', 80), Handler).serve_forever()\nPY")
+        host.cmd(f'nohup python3 /tmp/www/server.py >/tmp/{name}.http.log 2>&1 < /dev/null &')
+
+    def wait_for_backend(host, name):
+        for _ in range(20):
+            body = host.cmd("curl --connect-timeout 1 --max-time 1 -s http://127.0.0.1/index.html")
+            if f"index from {name}" in body:
+                return True
+        print(f"[WARN] backend {name} did not become ready in time")
+        return False
+
+    ready = True
+    for name in ["llm1", "llm2", "llm3"]:
+        host = net.get(name)
+        start_backend_server(host, name)
+        ready &= wait_for_backend(host, name)
     lb = net.get("lb1")
     lb.cmd("ip link set dev lb1-eth1 address 02:00:00:00:01:45 2>/dev/null || true")
     lb.cmd("ip link set dev lb1-eth2 address 02:00:00:00:02:45 2>/dev/null || true")
+    if not ready:
+        print("[WARN] one or more backends were not ready before the LB test started")
+
+
+def http_get_body(host, url):
+    return host.cmd(
+        f"curl --connect-timeout 3 --max-time 5 -sS {url}"
+    )
 
 
 def run_lb_tests(net):
     hc = net.get("hc")
     ok = True
     ok &= testing.ping(hc, "100.0.0.45", True)
-    body = hc.cmd("curl --connect-timeout 3 --max-time 3 -s http://100.0.0.45/index.html")
+    seen = set()
+    body = ""
+    for _ in range(5):
+        body = http_get_body(hc, "http://100.0.0.45/index.html")
+        if "index from" in body:
+            break
     print("[INFO] first GET body:", repr(body[:120]))
     ok &= "index from" in body
-    seen = set()
-    for i in range(9):
-        b = hc.cmd("curl --connect-timeout 3 --max-time 3 -s http://100.0.0.45/index.html")
+    for tag in ("llm1", "llm2", "llm3"):
+        if tag in body:
+            seen.add(tag)
+    for i in range(24):
+        b = http_get_body(hc, "http://100.0.0.45/index.html")
         for tag in ("llm1", "llm2", "llm3"):
             if tag in b:
                 seen.add(tag)
-    print("[INFO] backends observed in 9 GETs:", sorted(seen))
-    ok &= len(seen) >= 2
+    print("[INFO] backends observed in 25 GETs:", sorted(seen))
+    ok &= len(seen) == 3
     if len(seen) < 3:
-        print("[WARN] expected all three backends across 9 GETs; LB or ARP may need tuning on this VM")
+        print("[WARN] expected all three backends across 25 GETs; LB or ARP may need tuning on this VM")
     return ok
 
 
