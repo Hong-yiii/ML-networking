@@ -57,11 +57,11 @@ method_cl[1] -> cnt_put::Counter -> payload_cl::Classifier(
     -
 );
 
-payload_cl[0] -> cnt_malicious::Counter -> q2
-payload_cl[1] -> cnt_malicious
-payload_cl[2] -> cnt_malicious
-payload_cl[3] -> cnt_malicious
-payload_cl[4] -> cnt_malicious
+payload_cl[0] -> cnt_mal_passwd::Counter -> q2
+payload_cl[1] -> cnt_mal_varlog::Counter -> q2
+payload_cl[2] -> cnt_mal_insert::Counter -> q2
+payload_cl[3] -> cnt_mal_update::Counter -> q2
+payload_cl[4] -> cnt_mal_delete::Counter -> q2
 payload_cl[5] -> cnt_put_clean::Counter -> q3
 
 DriverManager(
@@ -74,7 +74,7 @@ DriverManager(
     print "HTTP responses: $(cnt_resp.count)",
     print "HTTP POST allowed: $(cnt_post.count)",
     print "HTTP PUT clean: $(cnt_put_clean.count)",
-    print "HTTP PUT malicious: $(cnt_malicious.count)",
+    print "HTTP PUT malicious: $(cnt_mal_passwd.count) + $(cnt_mal_varlog.count) + $(cnt_mal_insert.count) + $(cnt_mal_update.count) + $(cnt_mal_delete.count)",
     print "HTTP blocked methods: $(cnt_blocked.count)",
     print "Dropped: $(cnt_drop.count)",
 )
