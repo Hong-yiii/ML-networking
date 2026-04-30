@@ -1,3 +1,16 @@
+// IDS — IK2221 Phase 1 (inline bump-in-wire)
+//
+// Three ports match Mininet ``ids-eth*``. Rough geometry:
+//   eth1 — toward sw2 / upstream IZ path
+//   eth2 — toward insp (sink for diverted flows)
+//   eth3 — toward lb1 / downstream
+//
+// fd2/fd3 shortcut bridging stitches reverse directions; fd1 carries the deep inspection path.
+// Policy (PDF): ARP + ICMP pass transparently toward downstream; TCP “signaling” and HTTP responses forward;
+// HTTP requests must be POST or PUT; PUT payload start matched via hex Classifier for injection keywords.
+//
+// Classifier hex cheat-sheet (ASCII → hex): POST = 504f5354, PUT = 50555420 (note trailing space in matcher).
+
 define($PORT1 ids-eth1)
 define($PORT2 ids-eth2)
 define($PORT3 ids-eth3)
@@ -23,6 +36,7 @@ fd1 -> ac_in1::AverageCounter -> cl1::Classifier(
     -
 );
 
+// Raw bypass legs: average-rate metering only; maintains symmetry for non-fd1 ingress (topology-dependent wiring).
 fd3 -> ac_in3::AverageCounter -> q1
 fd2 -> ac_in2::AverageCounter -> q3
 
@@ -30,6 +44,7 @@ cl1[0] -> cnt_arp::Counter -> q3
 cl1[1] -> cnt_icmp::Counter -> q3
 cl1[3] -> cnt_drop::Counter -> Discard
 
+// Strip Ethernet + mark IPv4 header offset; IPClassifier dst/src port 80 splits HTTP transaction direction.
 cl1[2] -> Strip(14) -> MarkIPHeader(0) -> Print(IP-PKT, MAXLENGTH 200) -> ipc::IPClassifier(
     dst port 80,
     src port 80,
@@ -39,6 +54,7 @@ cl1[2] -> Strip(14) -> MarkIPHeader(0) -> Print(IP-PKT, MAXLENGTH 200) -> ipc::I
 ipc[1] -> cnt_resp::Counter -> q3
 ipc[2] -> cnt_tcpsig::Counter -> Print(TCP-OTHER, MAXLENGTH -1) -> q3
 
+// HTTP requests (dst port 80): method bytes at known offset — only POST/PUT continue; others → inspector (q2).
 ipc[0] -> Print(HTTP-REQ, MAXLENGTH 200) -> method_cl::Classifier(
     0/504f5354,
     0/50555420,
@@ -48,6 +64,8 @@ ipc[0] -> Print(HTTP-REQ, MAXLENGTH 200) -> method_cl::Classifier(
 method_cl[0] -> cnt_post::Counter -> q3
 method_cl[2] -> cnt_blocked::Counter -> q2
 
+// PUT bodies: Classifier offset 54 = first payload byte for typical curl-sized headers in tests;
+// patterns are ASCII hex for ``cat /etc/passwd``, ``cat /var/log/…``, SQL-ish INSERT/UPDATE/DELETE keywords (PDF list).
 method_cl[1] -> cnt_put::Counter -> payload_cl::Classifier(
     54/636174202f6574632f706173737764,
     54/636174202f7661722f6c6f672f,
@@ -64,6 +82,7 @@ payload_cl[3] -> cnt_mal_update::Counter -> q2
 payload_cl[4] -> cnt_mal_delete::Counter -> q2
 payload_cl[5] -> cnt_put_clean::Counter -> q3
 
+// DriverManager emits human-readable stats at Click shutdown (SIGTERM via killall).
 DriverManager(
     print "IDS starting",
     pause,

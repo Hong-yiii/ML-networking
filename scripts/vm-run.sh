@@ -9,6 +9,8 @@
 #   bash scripts/vm-run.sh 'click-check applications/nfv/lb1.click'
 #
 # Env: VM_SSH_HOST VM_SSH_PORT VM_SSH_USER VM_REMOTE_DIR (same as vm-sync.sh)
+#
+# wrap_sudo_bash_lc pipes sudo password non-interactively when remote tests need root (Mininet/Click).
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

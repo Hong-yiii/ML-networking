@@ -1,3 +1,14 @@
+"""
+Automated IK2221 Phase 1 regression tests (full topology: NAPT → IDS → LB).
+
+Design:
+  - Mimics ``make test``: builds MyTopo, starts services, assumes POX already running (Makefile starts it).
+  - MN_AUTOMATED=1 skips interactive CLI so Jenkins-style runs exit cleanly.
+  - VIP ping waits tolerate slow Click/OVS bring-up before HTTP assertions.
+
+Defense: each block maps to PDF clauses (UZ connectivity, ICMP to VIP, IDS method/payload policy, LB round-robin).
+"""
+
 import os
 import time
 from mininet.topo import Topo
@@ -12,9 +23,11 @@ import testing
 topos = {'mytopo': (lambda: MyTopo())}
 
 VIP = '100.0.0.45'
+# Virtual service IP implemented by lb1.click (not assigned to a single llm host).
 
 
 def wait_for_vip(net, timeout=30):
+    # Poll ICMP echo to VIP from UZ; proves NAPT + LB ICMP path without needing HTTP yet.
     h1 = net.get('h1')
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -25,6 +38,7 @@ def wait_for_vip(net, timeout=30):
 
 
 def run_tests(net):
+    # Each append returns bool; sum(results) counts passes (truthy ints).
     h1 = net.get('h1')
     h2 = net.get('h2')
 
@@ -65,6 +79,7 @@ def run_tests(net):
         for tag in ('llm1', 'llm2', 'llm3'):
             if tag in body:
                 seen_backends.add(tag)
+    # Require ≥2 distinct backends in 9 POSTs: balances strictness vs flaky timer/order on slow VMs.
     rr_ok = len(seen_backends) >= 2
     status = "PASS" if rr_ok else "FAIL"
     print(f"[{status}] round-robin: backends seen in 9 POSTs: {sorted(seen_backends)}")

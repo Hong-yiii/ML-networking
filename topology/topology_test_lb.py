@@ -2,6 +2,10 @@
 """
 Load-balancer focused tests (no NAPT/IDS in topology).
 
+Purpose:
+  Isolate lb1.click + backends on a flat 100.0.0.0/24 so LB/ARP/rewriter bugs are debuggable without
+  NAPT or IDS in the path. DPIDs still use 6 for lb1 and 3 for sw3 so the same POX branch starts Click.
+
 Usage (course VM, two common patterns):
 
 1) Two terminals
@@ -17,7 +21,7 @@ from mininet.node import RemoteController, OVSSwitch
 import os
 import sys
 
-# Allow ``python3 topology/topology_test_lb.py`` from repo root
+# Allow ``python3 topology/topology_test_lb.py`` from repo root (imports sibling ``topology`` / ``testing``).
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
@@ -30,6 +34,7 @@ class LbOnlyTopo(Topo):
 
     def __init__(self):
         Topo.__init__(self)
+        # Client sits on IZ subnet in this mock; default via VIP matches backend routing model in full topo.
         hc = self.addHost("hc", ip="100.0.0.100/24", defaultRoute="via 100.0.0.45")
         sw0 = self.addSwitch("sw0", dpid="1")
         lb1 = self.addSwitch("lb1", dpid="6")
@@ -76,6 +81,7 @@ def http_get_body(host, url):
 
 
 def run_lb_tests(net):
+    # Stricter than full topo test: require all three backends across 25 GETs (LB-only harness has no IDS variance).
     hc = net.get("hc")
     ok = True
     ok &= testing.ping(hc, "100.0.0.45", True)

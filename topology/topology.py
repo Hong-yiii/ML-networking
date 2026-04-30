@@ -1,3 +1,15 @@
+"""
+Mininet topology for IK2221 Phase 1 (NFV edge).
+
+System design (defense summary):
+  - Two addressing islands: User Zone (UZ) 10.0.0.0/24 and Inferencing Zone (IZ) 100.0.0.0/24.
+  - Fabric switches sw1–sw3 use OpenFlow L2 learning via POX (DPIDs 1–3).
+  - NFV “switches” napt, ids, lb1 (DPIDs 4–6) run Click on Linux netdevs; POX only starts Click.
+  - Traffic serializes: hosts → sw1 → napt → sw2 → ids → lb1 → sw3 → llm backends.
+  - VIP for HTTP is 100.0.0.45 on lb1; backends default-route via that VIP so return traffic hits the LB.
+
+Naming: switches must stay ordered sw1, sw2, sw3, … so Mininet assigns predictable DPIDs matching baseController.py.
+"""
 
 from mininet.topo import Topo
 from mininet.net import Mininet
@@ -9,6 +21,9 @@ import subprocess
 import signal
 import os
 import time
+
+# RemoteController + OVSSwitch: data plane is OVS; control plane is external POX on 127.0.0.1:6633.
+
 
 class MyTopo(Topo):
     def __init__(self):
@@ -36,6 +51,7 @@ class MyTopo(Topo):
         # You can update the topology as you see fit
 
         # Initialize hosts for user zone
+        # defaultRoute via 10.0.0.1: UZ “gateway” is the NAPT user-side address (see napt.click).
         h1 = self.addHost('h1', ip='10.0.0.50/24', defaultRoute='via 10.0.0.1')
         h2 = self.addHost('h2', ip='10.0.0.51/24', defaultRoute='via 10.0.0.1')
         # Initialize switch for user zone
@@ -62,6 +78,7 @@ class MyTopo(Topo):
         # Create inspection server for inferencing zone
         # TODO: Change IP to correct IP
         # insp = self.addHost('insp', ip='10.0.0.30/24')
+        # Passive PCAP sink; tcpdump started in startup_services. Route is nominal (host barely speaks IP).
         insp = self.addHost('insp', ip='100.0.0.30/24', defaultRoute='via 100.0.0.1')
         
         # Connect inspection server to ids switch
@@ -83,6 +100,7 @@ class MyTopo(Topo):
         # llm2 = self.addHost('llm2', ip='10.0.0.41/24')
         # llm3 = self.addHost('llm3', ip='10.0.0.42/24')
 
+        # Backends use VIP as default gateway so SYN-ACK and HTTP replies ARP toward .45 and reach lb1 (proxy-ARP / rewriter).
         llm1 = self.addHost('llm1', ip='100.0.0.40/24', defaultRoute='via 100.0.0.45')
         llm2 = self.addHost('llm2', ip='100.0.0.41/24', defaultRoute='via 100.0.0.45')
         llm3 = self.addHost('llm3', ip='100.0.0.42/24', defaultRoute='via 100.0.0.45')
@@ -95,6 +113,7 @@ class MyTopo(Topo):
 def startup_services(net):
     # Start http services and executing commands you require on each host...
     ### COMPLETE THIS PART ###
+    # Runs inside each Mininet host namespace after net.start(): commands are Linux shell on that host.
     def start_backend_server(host, name):
         host.cmd('mkdir -p /tmp/www')
         # Keep the static file for GET-based checks and run a tiny handler that
@@ -113,6 +132,7 @@ def startup_services(net):
     insp.cmd('rm -f /tmp/insp_capture.pcap && tcpdump -i insp-eth0 -w /tmp/insp_capture.pcap &')
 
     # Set MAC addresses on Click bridges to match Click config
+    # LB AddressInfo/ARPResponder in lb1.click expects fixed VIP-facing MACs; Mininet auto MACs would mismatch ARP ads.
     lb = net.get('lb1')
     if lb:
         lb.cmd('ip link set dev lb1-eth1 address 02:00:00:00:01:45 2>/dev/null || true')
@@ -133,9 +153,11 @@ if __name__ == "__main__":
     # Create topology
     topo = MyTopo()
 
+    # RemoteController: Mininet does not embed POX; you run ``make app`` separately so switches join this controller.
     ctrl = RemoteController("c0", ip="127.0.0.1", port=6633)
 
     # Create the network
+    # autoStaticArp: pre-populate ARP between Mininet hosts where applicable (NFV paths still need real ARP for VIP/NAPT).
     net = Mininet(topo=topo,
                   switch=OVSSwitch,
                   controller=ctrl,

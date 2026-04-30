@@ -1,3 +1,13 @@
+"""
+POX OpenFlow controller: fabric learning switches vs NFV Click launchers.
+
+On each switch ConnectionUp, datapath id (DPID) selects behavior:
+  1–3: ``LearningSwitch`` — normal L2 MAC learning on OVS (sw1, sw2, sw3).
+  4–6: spawn Click for napt, ids, lb1 respectively (paths assume ``make app`` copied .click to /opt/pox/ext/).
+
+Environment variables IK2221_*_REPORT redirect DriverManager output for grading artifacts.
+"""
+
 import os
 import datetime
 import time
@@ -18,6 +28,7 @@ class controller (object):
         core.openflow.addListeners(self)
 
     def _handle_ConnectionUp(self, event):
+        # event.dpid: OpenFlow datapath ID; must match Mininet addSwitch(..., dpid="N") ordering.
         id = event.dpid
         if id <= 3:
             log.info(f"Starting Learning Switch for switch {id}")
@@ -30,6 +41,7 @@ class controller (object):
                 "/opt/pox/ext/napt.click", "", napt_out, napt_err
             )
         elif id == 5:
+            # Click binds FromDevice to Linux netdev names; wait avoids racing Mininet interface creation.
             log.info("Starting IDS — waiting for ids-eth1 to appear...")
             for i in range(20):
                 if os.path.exists('/sys/class/net/ids-eth1'):
@@ -65,4 +77,5 @@ class controller (object):
 
 
 def launch(configuration=""):
+    # POX module entrypoint: ``pox.py baseController`` imports this package and calls launch().
     core.registerNew(controller)

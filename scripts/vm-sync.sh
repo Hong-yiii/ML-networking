@@ -7,6 +7,8 @@
 # Optional env:
 #   VM_SSH_HOST (default 127.0.0.1)  VM_SSH_PORT (default 2222)
 #   VM_SSH_USER (default ik2221)    VM_REMOTE_DIR (default ~/ML-networking)
+#
+# --delete mirrors deletions; excludes qcow2 disk images and VCS noise from transfer payload.
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run remote command read from stdin on the VM: stdin → ssh ... bash -lc <cmd>.
 # Usage: printf '%s' "cd ~/x && make" | scripts/vm-ssh-exec.sh 2222 ik2221@127.0.0.1
+# ``-tt`` forces TTY allocation so sudo prompts behave when keys are used without BatchMode.
 set -euo pipefail
 PORT="${1:?port}"
 USERHOST="${2:?user@host}"

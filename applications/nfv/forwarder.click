@@ -1,4 +1,5 @@
 // 2 variables to hold ports names
+// Skeleton sample forwarder: demonstrates L2 bridge pattern on ``sw1-eth*`` — not wired by baseController in Phase 1 submission.
 define($PORT1 sw1-eth1, $PORT2 sw1-eth2)
 
 // Script will run as soon as the router starts

@@ -10,6 +10,8 @@
 // ARP for 100.0.0.1 goes unanswered and the return path breaks. lb1 answers for the
 // whole inferencing subnet so all return traffic is intercepted and rewritten by
 // the IPRewriter mapping table.
+//
+// Defense cue: ``AddressInfo`` binds symbolic IPs/MACs used by ARPQuerier without assigning host IPs to lb1 Linux namespace.
 
 define($ETH1 lb1-eth1, $ETH2 lb1-eth2)
 define($VIP 100.0.0.45)
@@ -37,6 +39,7 @@ tcp_rw :: IPRewriter(rr, pass 1);
 arq1 :: ARPQuerier(lb1_client);   // resolves MACs on the client/IDS side
 arq2 :: ARPQuerier(lb1_server);   // resolves MACs on the server/sw3 side
 
+// Composite meter: satisfies brief-style instrumentation (rate + absolute counts per FromDevice/ToDevice legs).
 elementclass Meter {
   input -> ac::AverageCounter -> cnt::Counter -> output;
 }
@@ -147,6 +150,7 @@ eth2_tx -> m2_out -> td2;
 
 ScheduleInfo(fd1 .1, td1 1, fd2 .1, td2 1);
 
+// DriverManager summary includes tcp_rw.mapping_failures — nonzero hints at stray TCP segments lacking state.
 DriverManager(
   print "LB1 starting (VIP=100.0.0.45 -> llm1/llm2/llm3)",
   pause,

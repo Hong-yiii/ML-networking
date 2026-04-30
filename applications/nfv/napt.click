@@ -5,6 +5,8 @@
 // Translates TCP and ICMP echo between the two zones and handles ARP on both sides.
 // AverageCounter after each FromDevice and before each ToDevice (as required by brief).
 // Per-class counters are written to napt.report via DriverManager on teardown.
+//
+// Control-plane note: POX never programs NAT here — OpenFlow learning handles fabric only; this Click graph *is* the NAPT dataplane.
 
 define($USER_IF napt-eth1, $INF_IF napt-eth2)
 define($USER_IP 10.0.0.1,  $INF_IP 100.0.0.1)
@@ -13,6 +15,7 @@ define($USER_MAC 02:aa:00:00:00:01, $INF_MAC 02:aa:00:00:00:02)
 Script(print "Click NAPT on $USER_IF (10.0.0.0/24) <-> $INF_IF (100.0.0.0/24)")
 
 // Ingress / Egress devices
+// SNIFFER false: do not let kernel also forward copies (duplicate packets); PROMISC true sees all L2 dst.
 from_user::FromDevice($USER_IF, SNIFFER false, METHOD LINUX, PROMISC true)
 from_inf::FromDevice($INF_IF,  SNIFFER false, METHOD LINUX, PROMISC true)
 to_user::ToDevice($USER_IF, METHOD LINUX)
@@ -52,6 +55,7 @@ napt_rev::IPRewriterPatterns(inf_to_user $USER_IP 1024-65535 - -)
 
 // IPRewriter: input 0 = user->inf (apply user_to_inf),
 //             input 1 = inf->user (look up reverse mapping first).
+// Output 0 faces inferencing side querier; output 1 faces user side querier (reverse NAT path).
 tcp_rw::IPRewriter(
     pattern user_to_inf 0 1,
     pattern inf_to_user 1 0
@@ -64,6 +68,7 @@ icmp_rw::ICMPPingRewriter(
 )
 
 // L2 classifiers: ARP vs IPv4 vs other
+// Click pattern syntax: offset/mask — 12/0806 is EtherType ARP; 12/0800 is IPv4.
 cl_user_l2::Classifier(12/0806, 12/0800, -)
 cl_inf_l2::Classifier(12/0806,  12/0800, -)
 
@@ -146,6 +151,7 @@ q_user_arp -> [0]user_sched
 q_user_ip  -> [1]user_sched
 user_sched -> ac_user_out -> to_user
 
+// DriverManager: ``pause`` blocks until process termination; on SIGTERM/killall the handler prints counter snapshot (submission-style report).
 DriverManager(
     print "NAPT starting (10.0.0.0/24 <-> 100.0.0.0/24)",
     pause,

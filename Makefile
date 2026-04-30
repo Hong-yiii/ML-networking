@@ -1,5 +1,8 @@
 poxdir ?= /opt/pox/
 
+# Default POX install path on course VM; override: ``make poxdir=/path app``.
+# Rules mirror PDF deliverable: topo / app / clean / test; extras: test-lb, vm-sync, vm-test-lb.
+
 topo:
 	@echo "Starting topology (Mininet)..."
 	sudo python ./topology/topology.py
@@ -25,6 +28,7 @@ test:
 	    IK2221_IDS_REPORT="$(CURDIR)/ids.report"   \
 	    IK2221_LB_REPORT="$(CURDIR)/lb1.report"    \
 	    python $(poxdir)pox.py baseController > /tmp/pox_test.stdout 2>&1 &
+	# Allow POX + first OpenFlow connections + Click launches (especially IDS/LB waits) before Mininet starts.
 	sleep 8
 	sudo -E \
 	    MN_AUTOMATED=1 \
