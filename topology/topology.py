@@ -124,26 +124,6 @@ def startup_services(net):
         napt.cmd('ip link set dev napt-eth1 address 02:aa:00:00:00:01 2>/dev/null || true')
         napt.cmd('ip link set dev napt-eth2 address 02:aa:00:00:00:02 2>/dev/null || true')
 
-<<<<<<< HEAD
-=======
-        if skip_controller_nfv:
-            napt_out = os.environ.get('IK2221_NAPT_REPORT', '/tmp/napt.report')
-            napt_err = os.environ.get('IK2221_NAPT_STDERR', '/tmp/napt.stderr')
-            napt.cmd(f'nohup sudo click /opt/pox/ext/napt.click >"{napt_out}" 2>>"{napt_err}" < /dev/null &')
-
-    ids = net.get('ids')
-    if ids and skip_controller_nfv:
-        ids_out = os.environ.get('IK2221_IDS_REPORT', '/tmp/ids.report')
-        ids_err = os.environ.get('IK2221_IDS_STDERR', '/tmp/ids.stderr')
-        ids.cmd(f'nohup sudo click /opt/pox/ext/ids.click >"{ids_out}" 2>>"{ids_err}" < /dev/null &')
-
-    lb = net.get('lb1')
-    if lb and skip_controller_nfv:
-        lb_out = os.environ.get('IK2221_LB_REPORT', '/tmp/lb1.report')
-        lb_err = os.environ.get('IK2221_LB_STDERR', '/tmp/lb1.stderr')
-        lb.cmd(f'nohup sudo click /opt/pox/ext/lb1.click >"{lb_out}" 2>>"{lb_err}" < /dev/null &')
-
->>>>>>> 298dbe252d02db65dc4f6a002a23e943bc3b5c29
 
 
 # topos = {'mytopo': (lambda: MyTopo())}
