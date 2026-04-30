@@ -7,12 +7,3 @@ Inf-side  in  avg pps:
 Inf-side  in  total pkts: 
 User-side out avg pps:    
 User-side out total pkts: 
-Inf-side  out avg pps:    
-Inf-side  out total pkts: 
-ARP (user side):          
-ARP (inf side):           
-TCP translated (user->inf):
-TCP translated (inf->user):
-ICMP echo (user side):       
-ICMP echo (inf side):        
-Dropped (non-ARP/TCP/ICMP):

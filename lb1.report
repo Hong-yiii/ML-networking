@@ -8,14 +8,3 @@ eth1 out avg pps:
 eth1 out total pkts:           
 eth2 out avg pps:              
 eth2 out total pkts:           
-ARP requests  (client side):   
-ARP replies   (client side):   
-ARP requests  (server side):   
-ARP replies   (server side):   
-Service TCP   (client→VIP:80): 
-ICMP echo to VIP:              
-IP drops      (client side):   
-IP drops      (server side):   
-L2 drops      (client side):   
-L2 drops      (server side):   
-IPRewriter mapping failures:   

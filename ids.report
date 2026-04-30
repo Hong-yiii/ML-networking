@@ -1,2 +1,10 @@
 IDS starting
-IDS starting on ids-eth1 (clients) / ids-eth2 (insp) / ids-eth3 (lb1)
+IDS starting on ids-eth1 ids-eth2 ids-eth3
+=== IDS Report ===
+ARP: 3
+ICMP: 2
+TCP signaling: 0
+HTTP responses: 0
+HTTP POST allowed: 0
+HTTP PUT clean: 0
+HTTP PUT malicious: 0 + 0 + 0 + 0 + 0
