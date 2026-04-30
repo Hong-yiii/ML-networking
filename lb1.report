@@ -1,0 +1,21 @@
+LB1 starting (VIP=100.0.0.45 -> llm1/llm2/llm3)
+=================== LB1 Report ===================
+eth1 in  avg pps:              
+eth1 in  total pkts:           
+eth2 in  avg pps:              
+eth2 in  total pkts:           
+eth1 out avg pps:              
+eth1 out total pkts:           
+eth2 out avg pps:              
+eth2 out total pkts:           
+ARP requests  (client side):   
+ARP replies   (client side):   
+ARP requests  (server side):   
+ARP replies   (server side):   
+Service TCP   (client→VIP:80): 
+ICMP echo to VIP:              
+IP drops      (client side):   
+IP drops      (server side):   
+L2 drops      (client side):   
+L2 drops      (server side):   
+IPRewriter mapping failures:   

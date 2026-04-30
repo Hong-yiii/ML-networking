@@ -1,0 +1,29 @@
+[PASS] ping h1 -> 100.0.0.45 — got success, expected success
+
+=== Connectivity ===
+[PASS] ping h1 -> 10.0.0.51 — got success, expected success
+[PASS] ping h1 -> 100.0.0.45 — got success, expected success
+
+=== IDS: allowed methods ===
+[FAIL] curl POST h1 -> 100.0.0.45:80 — exit 28, expected success
+[FAIL] curl PUT h1 -> 100.0.0.45:80 — exit 28, expected success
+
+=== IDS: blocked methods ===
+[PASS] curl GET h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl HEAD h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl DELETE h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl OPTIONS h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl TRACE h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl CONNECT h1 -> 100.0.0.45:80 — exit 28, expected failure
+
+=== IDS: PUT injection payloads (should be blocked) ===
+[PASS] curl PUT h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl PUT h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl PUT h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl PUT h1 -> 100.0.0.45:80 — exit 28, expected failure
+[PASS] curl PUT h1 -> 100.0.0.45:80 — exit 28, expected failure
+
+=== Load balancer: round-robin across backends ===
+[FAIL] round-robin: backends seen in 9 POSTs: []
+
+=== Summary: 13/16 tests passed ===

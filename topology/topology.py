@@ -95,14 +95,12 @@ class MyTopo(Topo):
 def startup_services(net):
     # Start http services and executing commands you require on each host...
     ### COMPLETE THIS PART ###
-    skip_controller_nfv = os.environ.get('IK2221_SKIP_CONTROLLER_NFV') == '1'
-
     def start_backend_server(host, name):
         host.cmd('mkdir -p /tmp/www')
         # Keep the static file for GET-based checks and run a tiny handler that
         # also answers POST with the same identifying body for the round-robin test.
         host.cmd(f'echo "<html><body>index from {name}</body></html>" > /tmp/www/index.html')
-        host.cmd(f"cat > /tmp/www/server.py <<'PY'\nfrom http.server import BaseHTTPRequestHandler, HTTPServer\n\nBODY = b\"<html><body>index from {name}</body></html>\"\n\nclass Handler(BaseHTTPRequestHandler):\n    def _send_body(self):\n        self.send_response(200)\n        self.send_header('Content-Type', 'text/html')\n        self.send_header('Content-Length', str(len(BODY)))\n        self.end_headers()\n        self.wfile.write(BODY)\n\n    def do_GET(self):\n        self._send_body()\n\n    def do_POST(self):\n        self._send_body()\n\n    def log_message(self, format, *args):\n        pass\n\nHTTPServer(('0.0.0.0', 80), Handler).serve_forever()\nPY")
+        host.cmd(f"cat > /tmp/www/server.py <<'PY'\nfrom http.server import BaseHTTPRequestHandler, HTTPServer\n\nBODY = b\"<html><body>index from {name}</body></html>\"\n\nclass Handler(BaseHTTPRequestHandler):\n    def _send_body(self):\n        self.send_response(200)\n        self.send_header('Content-Type', 'text/html')\n        self.send_header('Content-Length', str(len(BODY)))\n        self.end_headers()\n        self.wfile.write(BODY)\n\n    def do_GET(self):\n        self._send_body()\n\n    def do_POST(self):\n        self._send_body()\n\n    def do_PUT(self):\n        self._send_body()\n\n    def log_message(self, format, *args):\n        pass\n\nHTTPServer(('0.0.0.0', 80), Handler).serve_forever()\nPY")
         host.cmd(f'nohup python3 /tmp/www/server.py >/tmp/{name}.http.log 2>&1 < /dev/null &')
 
     # Start HTTP servers on LLM nodes
@@ -114,7 +112,7 @@ def startup_services(net):
     insp = net.get('insp')
     insp.cmd('rm -f /tmp/insp_capture.pcap && tcpdump -i insp-eth0 -w /tmp/insp_capture.pcap &')
 
-    # Match lb1.click AddressInfo / ARPResponder MACs (Click does not learn these from Linux).
+    # Set MAC addresses on Click bridges to match Click config
     lb = net.get('lb1')
     if lb:
         lb.cmd('ip link set dev lb1-eth1 address 02:00:00:00:01:45 2>/dev/null || true')
@@ -125,17 +123,6 @@ def startup_services(net):
     if napt:
         napt.cmd('ip link set dev napt-eth1 address 02:aa:00:00:00:01 2>/dev/null || true')
         napt.cmd('ip link set dev napt-eth2 address 02:aa:00:00:00:02 2>/dev/null || true')
-
-        if skip_controller_nfv:
-            napt_out = os.environ.get('IK2221_NAPT_REPORT', '/tmp/napt.report')
-            napt_err = os.environ.get('IK2221_NAPT_STDERR', '/tmp/napt.stderr')
-            napt.cmd(f'nohup sudo click /opt/pox/ext/napt.click >"{napt_out}" 2>>"{napt_err}" < /dev/null &')
-
-    ids = net.get('ids')
-    if ids and skip_controller_nfv:
-        ids_out = os.environ.get('IK2221_IDS_REPORT', '/tmp/ids.report')
-        ids_err = os.environ.get('IK2221_IDS_STDERR', '/tmp/ids.stderr')
-        ids.cmd(f'nohup sudo click /opt/pox/ext/ids.click >"{ids_out}" 2>>"{ids_err}" < /dev/null &')
 
 
 

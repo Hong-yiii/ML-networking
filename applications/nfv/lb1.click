@@ -13,8 +13,8 @@
 
 define($ETH1 lb1-eth1, $ETH2 lb1-eth2)
 define($VIP 100.0.0.45)
-define($MAC1 02-00-00-00-01-45)
-define($MAC2 02-00-00-00-02-45)
+define($MAC1 02:00:00:00:01:45)
+define($MAC2 02:00:00:00:02:45)
 
 AddressInfo(
   lb1_client  $VIP  100.0.0.0/24  $MAC1,

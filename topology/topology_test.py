@@ -43,6 +43,8 @@ def run_tests(net):
     results.append(testing.curl(h1, VIP, method='HEAD',    expected=False))
     results.append(testing.curl(h1, VIP, method='DELETE',  expected=False))
     results.append(testing.curl(h1, VIP, method='OPTIONS', expected=False))
+    results.append(testing.curl(h1, VIP, method='TRACE',   expected=False))
+    results.append(testing.curl(h1, VIP, method='CONNECT', expected=False))
 
     print("\n=== IDS: PUT injection payloads (should be blocked) ===")
     results.append(testing.curl(h1, VIP, method='PUT',
@@ -66,8 +68,6 @@ def run_tests(net):
     rr_ok = len(seen_backends) >= 2
     status = "PASS" if rr_ok else "FAIL"
     print(f"[{status}] round-robin: backends seen in 9 POSTs: {sorted(seen_backends)}")
-    if len(seen_backends) < 3:
-        print("[WARN] fewer than 3 backends seen — ARP or LB may need settling time")
     results.append(rr_ok)
 
     passed = sum(results)
@@ -77,8 +77,6 @@ def run_tests(net):
 
 
 if __name__ == "__main__":
-
-    os.environ.setdefault('IK2221_SKIP_CONTROLLER_NFV', '1')
 
     topo = MyTopo()
     ctrl = RemoteController("c0", ip="127.0.0.1", port=6633)

@@ -24,7 +24,6 @@ test:
 	    IK2221_NAPT_REPORT="$(CURDIR)/napt.report" \
 	    IK2221_IDS_REPORT="$(CURDIR)/ids.report"   \
 	    IK2221_LB_REPORT="$(CURDIR)/lb1.report"    \
-	    IK2221_SKIP_CONTROLLER_NFV=1 \
 	    python $(poxdir)pox.py baseController > /tmp/pox_test.stdout 2>&1 &
 	sleep 8
 	sudo -E \
@@ -33,7 +32,6 @@ test:
 	    IK2221_NAPT_REPORT="$(CURDIR)/napt.report" \
 	    IK2221_IDS_REPORT="$(CURDIR)/ids.report"   \
 	    IK2221_LB_REPORT="$(CURDIR)/lb1.report"    \
-	    IK2221_SKIP_CONTROLLER_NFV=1 \
 	    python3 topology/topology_test.py 2>&1 | tee phase_1_report
 	$(MAKE) clean 2>/dev/null || true
 	@echo "=== Results written to phase_1_report, napt.report, ids.report, lb1.report ==="
